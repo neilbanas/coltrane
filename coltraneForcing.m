@@ -14,6 +14,7 @@ function [forcing0,pf] = coltraneForcing(varargin);
 % For details and context, see Banas et al (2016) Front. Mar. Res., submitted
 % (http://neilbanas.com/projects/coltrane)
 
+
 if isstruct(varargin)
 	pf = varargin;
 else
@@ -36,7 +37,7 @@ N = length(forcing0.t);
 
 % ------------------------------------------------------------------------------
 % simple idealized scenarios: gaussian prey availability, constant T
-elseif strcmpi(pf.scenario,'simple-g')
+if strcmpi(pf.scenario,'simple-g')
 	pf = setDefault(pf,'T0',8);
 	pf = setDefault(pf,'Tb0_over_T0',0.4); % based on WOA13 analysis
 	pf = setDefault(pf,'tPmax',365/2);
