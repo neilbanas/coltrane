@@ -43,8 +43,9 @@ if strcmpi(pf.scenario,'simple-g')
 	pf = setDefault(pf,'tPmax',365/2);
 	pf = setDefault(pf,'dtP',90);
 	pf = setDefault(pf,'P0',10);
+	pf = setDefault(pf,'dT0_seas',0);% seasonal range in T0
 
-	forcing0.T = pf.T0 .* ones(N,1);
+	forcing0.T = pf.T0 + pf.dT0_seas./2 .* cos((forcing0.t-365/2)./365.*2.*pi);
 	forcing0.Tb = pf.Tb0_over_T0 .* pf.T0 .* ones(N,1);
 	forcing0.P = pf.P0 .* exp(-(forcing0.t-365/2).^2./pf.dtP.^2);
 
