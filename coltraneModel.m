@@ -245,9 +245,6 @@ if p.Nyears > 1
 end
 
 
-
-
-
 % ------------------------------------------------------------------------------
 % egg/reserve model postprocessing ---------------------------------------------
 
@@ -306,7 +303,11 @@ v.by_t.rhomean = sum(rhoWN) ./ sum(WN);
 Pgrow = forcing.P;
 Pgrow(v.a < 1 | v.D >=1) = nan;
 v.by_t.satmean = nanmean(Pgrow ./ (p.Ks + Pgrow));
-v.by_t.capfrac = nanmean(v.Ecap.*exp(v.lnN)) ./ nanmean((v.Ecap+v.Einc).*exp(v.lnN));
+v.by_t.capfrac = nanmean(v.Ecap.*exp(v.lnN)) ./ ...
+				 nanmean((v.Ecap+v.Einc).*exp(v.lnN));
+NA = exp(v.lnN);
+NA(v.D<1) = 0;
+v.by_t.recruitmentToAdult = max(NA);
 
 
 % find a stable cycle of egg production
