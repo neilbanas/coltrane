@@ -1,7 +1,7 @@
-function [cases,stats,p1,forcing1] = ...
+function [cases,pot,pop,p1,forcing1] = ...
 	coltraneEnsemble(forcingCase,forcingOptions,paramOptions,fileBasename);
 
-% [cases,stats,p1,forcing1] = ...
+% [cases,pot,pop,p1,forcing1] = ...
 %     coltraneEnsemble(forcingCase,forcingOptions,paramOptions,fileBasename);
 %
 % framework for running families of cases of coltraneModel.m, varying the
@@ -14,6 +14,10 @@ function [cases,stats,p1,forcing1] = ...
 %					  'myfile');
 % runs 2x3 cases and save the results to myfile1.mat ... myfile6.mat. If 
 % fileBasename is omitted or empty, returns summary stats only.
+%
+% as in the output from a single coltraneModel.m case, _pot_ is stats from the
+% potential (phi) model, and _pop_ is stats from the egg/reserve (ER) model.
+% only scalar stats are retained.
 
 
 if nargin<4, fileBasename = ''; end
@@ -40,26 +44,34 @@ disp([num2str(Ntot) ' cases']);
 
 % run the first case to get sample output, and set aside the p, forcing 
 % structures
-[v,p1,forcing1] = runOneCase(1,cases,forcingCase,forcingOptions,paramOptions);
-[~,statsFields] = scalarStats(v);
+out1 = runOneCase(1,cases,forcingCase,forcingOptions,paramOptions);
+p1 = out1.p;
+forcing1 = out1.forcing;
+[~,potFields] = scalarStats(out1.pot);
+[~,popFields] = scalarStats(out1.pop);
 
 % main loop ---------------------------------
 parfor_progress(Ntot);
 parfor k=1:Ntot
-	[v,p,forcing] = runOneCase(k,cases,forcingCase,forcingOptions,paramOptions);
+	outk = runOneCase(k,cases,forcingCase,forcingOptions,paramOptions);
 	% save the results
 	if ~isempty(fileBasename)
-		saveOneCase(k,fileBasename,v);
+		saveOneCase(k,fileBasename,outk);
 	end	
-	stats_k = scalarStats(v);
-	statsMatrix(k,:) = stats_k;	
+	pot_k = scalarStats(outk.pot);
+	pop_k = scalarStats(outk.pop);
+	potMatrix(k,:) = pot_k;	
+	popMatrix(k,:) = pop_k;	
 	parfor_progress;
 end
 parfor_progress(0);
 
 % clean up output structures ----------------
-for i=1:length(statsFields)
-	stats.(statsFields{i}) = reshape(statsMatrix(:,i),N1);
+for i=1:length(potFields)
+	pot.(potFields{i}) = reshape(potMatrix(:,i),N1);
+end
+for i=1:length(popFields)
+	pop.(popFields{i}) = reshape(popMatrix(:,i),N1);
 end
 fields = fieldnames(cases);
 for i=1:length(fields)
@@ -72,10 +84,12 @@ for i=1:length(fields)
 end
 
 
+
+
 % ------------------------------------------------------------------------------
 
 
-function [v,p,forcing] = runOneCase(k,cases,forcingCase,forcingOptions,paramOptions);
+function out = runOneCase(k,cases,forcingCase,forcingOptions,paramOptions);
 NF = length(forcingOptions)/2;
 NP = length(paramOptions)/2;
 % run one case
@@ -89,7 +103,7 @@ for i=1:NP
 	opt{i*2} = cases.(paramOptions{i*2-1})(k);
 end
 p = coltraneParams(opt{:});
-[v,p,forcing] = coltraneModel(forcing0,p);
+out = coltraneModel(forcing0,p);
 
 
 function saveOneCase(k,fileBasename,v,p,forcing);
