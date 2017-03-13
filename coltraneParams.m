@@ -33,19 +33,10 @@ p=setDefault(p,'exp_ea',0.62); % egg weight = r_ea * adult weight^exp_ea
 p=setDefault(p,'theta',0.7); % metabolic scaling exponent
 p=setDefault(p,'u0',0.009); % food-saturated development rate at T = 0 
 p=setDefault(p,'I0',0.4); % food-saturated ingestion rate at S=1 µgC, T=0
-p=setDefault(p,'Wa0',150); % estimated adult size
 p=setDefault(p,'GGE_nominal',0.33); % for relating adult size to I0 and u0.
-p=setDefault(p,'T_nominal',8);
-p=setDefault(p,'infer_what','Wa0');
-	% u0, I0, Wa0 are related to each other (via GGE_nominal, T_nominal, Q10d, 
-	% Q10g). One of them needs to be adjusted to match the others. This switch 
-	% says which.
 p=setDefault(p,'Q10g',2.5); % Q10 for growth and ingestion
 p=setDefault(p,'Q10d',3); % Q10 for development
-p=setDefault(p,'Ks',3); % prey saturation half-saturation; same units as P
-p=setDefault(p,'alpha_s',1);
-	% shape of S/R allocation curve (>1: more investment in R)
-	% note: not used in Coltrane 1.0
+p=setDefault(p,'Ks',3); % prey half-saturation; same units as P
 p=setDefault(p,'Df',0.10); % age of first feeding (0.10 = start of N3)
 p=setDefault(p,'Ds',0.35); % age at which to start storing lipids
 p=setDefault(p,'Ddia',0.49);
@@ -62,25 +53,6 @@ p=setDefault(p,'rm',0.8 * 0.17);
 p=setDefault(p,'rb',0.25); % metabolism at a=0 as fraction of metabolism at a=1
 p=setDefault(p,'r_starv',0.1); % if R < -r_starv S, starvation
 p=setDefault(p,'r_phi_max',1.5);
-
-% harmonize Wa0, u0, I0
-% if you ignore egg mass (as in Banas and Campbell, MEPS, submitted)
-% Wa ^ (1-theta) ~ (1-theta) GGE (1-Df) (I0 / u0) (qg/qd)
-qoverq = (p.Q10g./p.Q10d).^(p.T_nominal./10);
-co = (1-p.theta) .* p.GGE_nominal .* (1-p.Df) .* qoverq;
-if strcmpi(p.infer_what, 'Wa0')
-	p.Wa0 = (co .* p.I0 ./ p.u0) .^ (1./(1-p.theta));
-elseif strcmpi(p.infer_what, 'I0')
-	p.I0 = p.u0 .* p.Wa0 ^ (1-p.theta) ./ co;
-elseif strcmpi(p.infer_what, 'u0')
-	p.u0 = co .* p.I0 ./ p.Wa0.^(1-p.theta);
-elseif strcmpi(p.infer_what,'GGE_nominal')
-	p.GGE_nominal = p.u0 ./ p.I0 .* p.Wa0 .^ (1-p.theta) ./ ...
-		( (1-p.Df) .* qoverq .* (1-p.theta) );
-end
-
-% estimated egg size from estimated adult size
-p=setDefault(p,'We0', p.r_ea .* p.Wa0.^p.exp_ea);
 
 % set mortality
 p=setDefault(p,'m0',0.67 * p.GGE_nominal * p.I0);

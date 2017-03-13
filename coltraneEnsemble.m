@@ -88,7 +88,7 @@ opt = paramOptions;
 for i=1:NP
 	opt{i*2} = cases.(paramOptions{i*2-1})(k);
 end
-p = coltraneParams(opt{:},'T_nominal',mean(forcing0.T));
+p = coltraneParams(opt{:});
 [v,p,forcing] = coltraneModel(forcing0,p);
 
 

@@ -39,6 +39,16 @@ v.m = zeros(N,NC); % mortality rate
 v.Fin = zeros(N,NC); % ingestion flux
 v.Fmet = zeros(N,NC); % metabolism flux
 
+% pick a guess at adult size (Wa0) based on mean temperature in the forcing,
+% and pick a corresponding guess at egg size (We0) based on this.
+% these are no longer calculated in coltraneParams.m but still stored in _p_
+% until a bigger reorganisation to come
+T_nominal = mean(forcing.T(:,1));
+qoverq = (p.Q10g./p.Q10d).^(T_nominal./10);
+co = (1-p.theta) .* p.GGE_nominal .* (1-p.Df) .* qoverq;
+p.Wa0 = (co .* p.I0 ./ p.u0) .^ (1./(1-p.theta));
+p.We0 = p.r_ea .* p.Wa0.^p.exp_ea;
+
 % initial conditions
 for i=1:NC
 	f = find(t == p.tspawn(i));	
@@ -78,8 +88,8 @@ for n=1:N-1
 	G = Fin - Fmet;	
 	GSdt = G .* v.S(n,:) .* p.dt;
 	% allocation of positive net gain to S and phi
-	fs = (min(v.D(n,:),1)-1) ./ (p.Ds(1,:) - 1 - small);
-	fs = min(1, max(0, fs.^p.alpha_s)); % fs=1 means entirely to/from S
+	fs = (min(v.D(n,:),1)-1) ./ (p.Ds - 1 - small);
+	fs = min(1, max(0, fs)); % fs=1 means entirely to/from S
 	GSdtpos = max(0,GSdt);
 	v.S(n+1,sp) = v.S(n,sp) + fs(sp) .* GSdtpos(sp);
 	v.phi(n+1,sp) = v.phi(n,sp) + (1-fs(sp)) .* GSdtpos(sp);
