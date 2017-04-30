@@ -17,9 +17,9 @@ cohort.Wa = sum(SR.*Na)./sum(Na); % abundance-weighted average of adult states
 cohort.We = p.r_ea .* cohort.Wa.^p.exp_ea;
 	% updated egg size: if Wa = p.Wa0, We = p.We0
 
-% lifetime egg production (1-generation calculation)
-cohort.LEP = sum((v.Einc+v.Ecap).*exp(v.lnN))./cohort.We.*p.dt;
-cohort.LEP(isnan(cohort.LEP)) = 0;
+% lifetime egg production: expected eggs per egg
+cohort.LEP_by_egg = sum((v.Einc+v.Ecap).*exp(v.lnN))./cohort.We.*p.dt;
+cohort.LEP_by_egg(isnan(cohort.LEP_by_egg)) = 0;
 % note: a simple way to take into account internal life-history mismatch without
 % the eigenvalue calculation below would be a two-generation calculation:
 % instead of LEP = integral of E * N, LEP2 = integral of E * N * LEP
@@ -29,21 +29,18 @@ cohort.LEP(isnan(cohort.LEP)) = 0;
 de = (v.Fin-v.Fmet).*v.S.*exp(v.lnN);
 de(isnan(de)) = 0;
 cohort.ener_gain = p.dt .* sum(de);
-cohort.ener_egg = (cohort.LEP - 1).*cohort.We;
-cohort.ener_yield = cohort.ener_gain - cohort.ener_egg; 
+cohort.ener_egg = (cohort.LEP_by_egg - 1).*cohort.We;
 de = v.m.*(v.S+v.R).*exp(v.lnN);
 de(isnan(de)) = 0;
-cohort.ener_yield1 = p.dt .* sum(de); % for checking
-% there is in fact a difference between yield = gain - eggs and yield1 = 
-% explicit integral of mortality, which comes from the final value
-% of (R+S)N at the moment of starvation: net accumulation of biomass in the
-% cohort itself. But this might well be thought of as (eventually) another
-% yield to predators.
+cohort.ener_yield = p.dt .* sum(de); % for checking
 de = v.m.*v.R.*exp(v.lnN);
 de(isnan(de)) = 0;
-cohort.ener_yield1_R =  p.dt .* sum(de);
-cohort.rhoY = cohort.ener_yield1_R ./ cohort.ener_yield1;
+cohort.ener_yield_R =  p.dt .* sum(de);
+cohort.rhoY = cohort.ener_yield_R ./ cohort.ener_yield;
 	% yield (trophic transfer) of R as fraction of total yield
+cohort.ener_starv = cohort.ener_gain - cohort.ener_egg - cohort.ener_yield;
+	% the residual of the three terms is (R+S)N at the moment of starvation--
+	% accumulation of energy gain in the cohort itself
 
 % other metrics by cohort
 cohort.develtime = sum(v.D < 1) .* p.dt;
@@ -111,9 +108,9 @@ fields = fieldnames(cohort);
 for i=1:length(fields)
 	F = cohort.(fields{i});
 	F(isnan(F))=0;
-	pop.(fields{i}) = sum(F.*pop.n.*cohort.LEP) ./ sum(pop.n.*cohort.LEP);
-		% weighted by egg production and egg fitness (expectation value in next 
-		% gen). To weight these simply by egg production, sum(F.*v.n)
+	pop.(fields{i}) = sum(F.*pop.n) ./ sum(pop.n);
+		% previous versions weighted by n * LEP instead of n, which is perhaps
+		% overthinking it
 end
 tt = [v.tspawn(cumsum(pop.n)>0.1.*sum(pop.n)) nan];
 pop.tE10 = tt(1); % yearday when 1st 10% of egg prod completed
@@ -121,8 +118,6 @@ tt = [v.tspawn(cumsum(pop.n)>0.5.*sum(pop.n)) nan];
 pop.tE50 = tt(1);
 tt = [v.tspawn(cumsum(pop.n)>0.9.*sum(pop.n)) nan];
 pop.tE90 = tt(1);
-pop.LEP_by_egg = sum(cohort.LEP .* pop.n);
-	% egg-production-weighted LEP (compare with lam)
 pop.LEP_by_adult = pop.LEP_by_egg ./ pop.recruitmentToAdult;
 	% lifetime egg production per successfully recruited adult
 	% (per adult female might be twice this)
