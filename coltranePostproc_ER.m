@@ -15,7 +15,7 @@ Na(v.D<1 | isnan(SR)) = 0;
 SR(isnan(SR)) = 0;
 cohort.Wa = sum(SR.*Na)./sum(Na); % abundance-weighted average of adult states
 cohort.We = p.r_ea .* cohort.Wa.^p.exp_ea;
-	% updated egg size: if Wa = p.Wa0, We = p.We0
+	% updated egg size: if Wa = v.Wa_theo, We = v.We_theo
 
 % lifetime egg production: expected eggs per egg
 cohort.LEP_by_egg = sum((v.Einc+v.Ecap).*exp(v.lnN))./cohort.We.*p.dt;
@@ -121,7 +121,11 @@ pop.tE90 = tt(1);
 pop.LEP_by_adult = pop.LEP_by_egg ./ pop.recruitmentToAdult;
 	% lifetime egg production per successfully recruited adult
 	% (per adult female might be twice this)
-
+pop.Wa_theo = v.Wa_theo;
+pop.We_theo = v.We_theo;
+	 % preserve the initial guesses at adult and egg size (see beginning of
+	 % coltraneModel.m, before the main loop)
+	 
 
 % annual routine ---------------------------------------------------------------
 % abundance-weights for adding up time series to make a population.

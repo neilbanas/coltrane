@@ -7,7 +7,9 @@ function pot = coltranePostproc_phi(v,p,forcing);
 Ny = p.Nyears+1; % Ny = record length, p.Nyears = time allowed for the 
 				 % latest-spawned generation to develop
 t = v.t;
-F0 = v.phi ./ p.We0 .* exp(v.lnN) .* double(v.D >= 1);
+pot.Wa_theo = v.Wa_theo;
+pot.We_theo = v.We_theo;
+F0 = v.phi ./ v.We_theo .* exp(v.lnN) .* double(v.D >= 1);
 	% F0(i,j) is potential eggs ("fitness") at time _forcing.t(i,j)_ for a 
 	% cohort spawned on _v.tspawn(j)_
 pot.F0 = F0;

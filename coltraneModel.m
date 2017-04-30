@@ -39,22 +39,21 @@ v.m = zeros(N,NC); % mortality rate
 v.Fin = zeros(N,NC); % ingestion flux
 v.Fmet = zeros(N,NC); % metabolism flux
 
-% pick a guess at adult size (Wa0) based on mean temperature in the forcing,
-% and pick a corresponding guess at egg size (We0) based on this.
-% these are no longer calculated in coltraneParams.m but still stored in _p_
-% until a bigger reorganisation to come
+% pick a guess at adult size based on mean temperature in the forcing,
+% and pick a corresponding guess at egg size based on this. These used to be
+% called p.Wa0 and p.We0.
 T_nominal = mean(forcing.T(:,1));
 qoverq = (p.Q10g./p.Q10d).^(T_nominal./10);
 co = (1-p.theta) .* p.GGE_nominal .* (1-p.Df) .* qoverq;
-p.Wa0 = (co .* p.I0 ./ p.u0) .^ (1./(1-p.theta));
-p.We0 = p.r_ea .* p.Wa0.^p.exp_ea;
+v.Wa_theo = (co .* p.I0 ./ p.u0) .^ (1./(1-p.theta));
+v.We_theo = p.r_ea .* v.Wa_theo.^p.exp_ea;
 
 % initial conditions
 for i=1:NC
 	f = find(t == v.tspawn(i));	
 	v.lnN(f,i) = 0;
 	v.D(f,i) = 0;
-	v.S(f,i) = p.We0;
+	v.S(f,i) = v.We_theo;
 	v.phi(f,i) = 0;
 	v.R(f,i) = 0;
 	v.a(f,i) = 1;
@@ -71,7 +70,7 @@ for n=1:N-1
 	Teff = v.a(n,:) .* forcing.T(n,:) + (1-v.a(n,:)) .* forcing.Tb(n,:);
 	qd = (p.Q10d^0.1) .^ Teff;
 	qg = (p.Q10g^0.1) .^ Teff;
-	Sthm1 = max(p.We0, v.S(n,:)) .^ (p.theta-1);
+	Sthm1 = max(v.We_theo, v.S(n,:)) .^ (p.theta-1);
 	% development
 	u = p.u0 .* qd .* sat .* v.a(n,:);
 	nf = v.D(n,:) < p.Df; % flag for non-feeding stage
@@ -81,9 +80,11 @@ for n=1:N-1
 	% assimilation
 	Imax = p.I0 .* qg .* Sthm1; % max ingestion rate at T, size
 	Fin = p.r_assim .* Imax .* sat .* v.a(n,:);
+		% this is r_a I in Banas et al 2016
 	Fin(nf) = 0; % no gain in the non-feeding stages
 	% metabolism and net gain
 	Fmet = p.rm .* Imax .* (p.rb + (1-p.rb).*v.a(n,:));
+		% this is M in Banas et al 2016
 	Fmet(nf) = 0; % G = 0 for non-feeding stages
 	G = Fin - Fmet;	
 	GSdt = G .* v.S(n,:) .* p.dt;
