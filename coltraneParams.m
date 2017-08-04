@@ -54,10 +54,10 @@ p=setDefault(p,'rb',0.25); % metabolism at a=0 as fraction of metabolism at a=1
 p=setDefault(p,'r_starv',0.1); % if R < -r_starv S, starvation
 p=setDefault(p,'r_phi_max',1.5);
 
-% set mortality
-p=setDefault(p,'m0',0.67 * p.GGE_nominal * p.I0);
-	% mortality at S = 1 µgC, T = 0
-
+% set mortality (m0 = mortality at S = 1 µgC, T = 0)
+p=setDefault(p,'m0_over_GGE_I0',0.67);
+p=setDefault(p,'m0',p.m0_over_GGE_I0 * p.GGE_nominal * p.I0);
+p.m0_over_GGE_I0 = p.m0./p.GGE_nominal./p.I0;
 
 
 
