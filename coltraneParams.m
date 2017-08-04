@@ -45,6 +45,15 @@ p=setDefault(p,'tegg',0);
 	% time at which to start reproducing, maturation permitting
 p=setDefault(p,'fcap',1); % rate of capital egg prod relative to max possible
 p=setDefault(p,'finc',1); % rate of income egg prod relative to max possible
+p=setDefault(p,'myopicDiapause',1);
+	% boolean switch (0/1) for whether diapause should be set by a myopic
+	% criterion (Banas et al., Front Mar Res, 2017) or by the explicit timing
+	% parameters below
+p=setDefault(p,'tdia_enter',270);
+p=setDefault(p,'tdia_exit',90);
+	% yeardays to enter and exit diapuase, if myopicDiapause = 0.
+	% note that these are yeardays, unlike tegg, which doesn't reset at the end
+	% of a year
 p=setDefault(p,'r_assim',0.67); % assimilation as fraction of ingestion
 p=setDefault(p,'rm',0.8 * 0.17);
 	% active metabolism as fraction of max assimilation

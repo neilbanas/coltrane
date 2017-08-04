@@ -97,10 +97,23 @@ for n=1:N-1
 	% negative net gain is taken from phi
 	GSdtneg = min(0,GSdt);
 	v.phi(n+1,sp) = v.phi(n+1,sp) + GSdtneg(sp);	
-	% determine diapause (instantaneous assessment; fluctuates step by step)
-	C = max(0, 1 + min(p.r_phi_max, v.phi(n,:))./v.S(n,:));
-	sat_crit = p.rm .* (1-p.rb) ./ p.r_assim + C .* p.m0./p.I0./p.r_assim;
-	dia = v.D(n,:) > p.Ddia & sat < sat_crit;
+	% determine diapause
+	if p.myopicDiapause
+		% instantaneous assessment; fluctuates step by step
+		C = max(0, 1 + min(p.r_phi_max, v.phi(n,:))./v.S(n,:));
+		sat_crit = p.rm .* (1-p.rb) ./ p.r_assim + C .* p.m0./p.I0./p.r_assim;
+		dia = v.D(n,:) > p.Ddia & sat < sat_crit;
+	else
+		% an explicit range of yeardays
+		yday = mod(forcing.t(n,:),365);
+		if p.tdia_enter > p.tdia_exit
+			dia = v.D(n,:) > p.Ddia & ...
+				(yday >= p.tdia_enter | yday <= p.tdia_exit);
+		else
+			dia = v.D(n,:) > p.Ddia & ...
+				(yday >= p.tdia_enter & yday <= p.tdia_exit);
+		end 
+	end
 	v.a(n+1,sp & ~dia) = 1;
 	v.a(n+1,sp & dia) = 0; % assume 0 activity during diapause
 	% mortality
