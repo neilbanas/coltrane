@@ -79,27 +79,41 @@ dDdt(isfeeding) = dDdt_feeding(isfeeding); % full formula
 v.D = cumsum(dDdt) .* p.dt;
 v.D(v.D>1) = 1;
 
-% net gain and growth: W(t) --------------------------
-v.W(~isfeeding) = v.We_theo;
+% juvenile growth: W(t) ------------------------------
 % approximate curve of W(D), valid for a=1
+% this is used for the allometry in the calculation of net gain
 isgrowing = isfeeding & v.D < 1;
 satmean = sum(sat .* isgrowing) ./ sum(isgrowing);
 c = (1-p.theta) .* qg ./ qd .* p.I0 ./ p.u0 .* (p.r_assim - p.rm ./ satmean);
-v.W(isgrowing) = ((v.We_theo^(1-p.theta)) + ...
+Wapprox = v.W;
+Wapprox(isgrowing) = ((v.We_theo^(1-p.theta)) + ...
 	c(isgrowing) .* (v.D(isgrowing) - p.Df)) .^ (1/(1-p.theta));
-% cumulative diapause losses 
-dWdt_diapause = - isgrowing .* (1-v.a) .* ...
-	p.rb .* p.rm .* qg .* p.I0 .* (v.W.^p.theta);
-v.W2 = v.W + cumsum(dWdt_diapause) .* p.dt;
-% adult size
+% net gain over development (here stored as gain * W)
+ImaxW = qg .* p.I0 .* Wapprox .^ p.theta;
+	% only used at (isgrowing=1), not necessarily accurate beyond that
+astar = p.rb + (1-p.rb) .* v.a;
+GW = zeros(size(v.W));
+GW(isgrowing) = ImaxW(isgrowing) .* ...
+	(v.a(isgrowing) .* p.r_assim .* sat(isgrowing) - p.rm .* astar(isgrowing));
+% integrate to get the correct W over development
+v.W = v.We_theo + cumsum(GW) .* p.dt;
+% adult size Wa
 last = v.D(1:end-1,:) < 1 & v.D(2:end,:)==1;
 v.Wa = max(v.W(1:end-1,:) .* last);
 isadult = v.D >= 1;
 Wa2 = repmat(v.Wa,[N 1]);
 v.W(isadult) = Wa2(isadult);
+% calculate net gain during adulthood (used later to calculate egg production)
+% and fill in juvenile ingestion, metabolism, and net gain while we're at it
+Imax = qg .* p.I0 .* v.W.^(p.theta-1);
+Imax(~isfeeding) = 0;
+Imax(v.W<v.We_theo) = 0;
+v.I = v.a .* p.r_assim .* sat .* Imax;
+v.M = p.rm .* astar .* Imax;
+v.G = I - M;
 
 
-% mortality and survivorship
+% mortality and survivorship: N(t) ------------------
 
 
 
