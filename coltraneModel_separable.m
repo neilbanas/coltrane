@@ -64,10 +64,12 @@ C = 1;
 sat_crit = p.rm .* (1-p.rb) ./ p.r_assim + C .* p.m0./p.I0./p.r_assim;
 v.a = double(sat >= sat_crit);
 
+
 % temperature response factors -----------------------
 Teff = v.a .* forcing.T + (1-v.a) .* forcing.Tb;
 qd = (p.Q10d^0.1) .^ Teff;
 qg = (p.Q10g^0.1) .^ Teff;
+
 
 % development: D(t) ----------------------------------
 isalive = forcing.t >= repmat(v.tspawn,[N 1]); % spawned yet?
@@ -78,6 +80,19 @@ dDdt_feeding = isalive .* p.u0 .* qd .* v.a .* sat;
 dDdt(isfeeding) = dDdt_feeding(isfeeding); % full formula 
 v.D = cumsum(dDdt) .* p.dt;
 v.D(v.D>1) = 1;
+isfeeding = v.D >= params.Df;
+	% because cumsum() is one timestep off from a true forward integration
+% development time
+isadult = v.D >= 1;
+ta = v.t;
+ta(~isadult) = inf;
+tj = v.t;
+tj(~(v.D>0)) = inf;
+v.t0eff = min(tj); % effective spawning date, discounting unrealistic long waits
+v.dtdev = min(ta) - v.t0eff;
+	% development time, from when D starts advancing beyond 0 (t0eff) to D=1
+v.dtdev(~any(isadult)) = nan;
+
 
 % juvenile growth: W(t) ------------------------------
 % approximate curve of W(D), valid for a=1
@@ -97,6 +112,7 @@ GW(isgrowing) = ImaxW(isgrowing) .* ...
 	(v.a(isgrowing) .* p.r_assim .* sat(isgrowing) - p.rm .* astar(isgrowing));
 % integrate to get the correct W over development
 v.W = v.We_theo + cumsum(GW) .* p.dt;
+v.W = max(0,v.W);
 % adult size Wa
 last = v.D(1:end-1,:) < 1 & v.D(2:end,:)==1;
 v.Wa = max(v.W(1:end-1,:) .* last);
@@ -109,13 +125,33 @@ Imax = qg .* p.I0 .* v.W.^(p.theta-1);
 Imax(~isfeeding) = 0;
 Imax(v.W<v.We_theo) = 0;
 v.I = v.a .* p.r_assim .* sat .* Imax;
+	% this was r_assim * I, as opposed to I, in Coltrane 1.0
 v.M = p.rm .* astar .* Imax;
 v.G = I - M;
 
 
 % mortality and survivorship: N(t) ------------------
+v.m = p.m0 .* qg .* v.a .* v.W.^(p.theta-1); % mort. rate at T, size
+v.m(~isalive) = 0;
+v.lnN = cumsum(-v.m) .* p.dt;
+% adult recruitment: survivorship at D=1
+lnNa = v.lnN;
+lnNa(~isadult) = nan;
+v.Na = exp(max(lnNa));
 
 
+% egg production and fitness ------------------------
+% one-generation calculation; ignores timing and internal life-history mismatch
+Einc = C.G .* C.W; % energy put into income egg prod.
+Einc(~isadult) = 0;
+C.Finc = sum(Einc.*exp(C.lnN)) .* params.dt ./ C.We_theo;
+	% lifetime eggs per egg, from adult accumulation of energy (i.e., income)
+C.Fcap = 0.5 .* C.Wa .* C.Na ./ C.We_theo;
+	% lifetime eggs per egg, from juvenile accumulation of energy, stored
+	% in the form of body mass W (i.e., capital)
+	% note the magic number 0.5!
+C.F = C.Finc + C.Fcap;
+C.capfrac = C.Fcap ./ C.F;
 
 
 % organise output into structures ----------------------------------------------
