@@ -80,7 +80,7 @@ dDdt_feeding = isalive .* p.u0 .* qd .* v.a .* sat;
 dDdt(isfeeding) = dDdt_feeding(isfeeding); % full formula 
 v.D = cumsum(dDdt) .* p.dt;
 v.D(v.D>1) = 1;
-isfeeding = v.D >= params.Df;
+isfeeding = v.D >= p.Df;
 	% because cumsum() is one timestep off from a true forward integration
 % development time
 isadult = v.D >= 1;
@@ -142,16 +142,16 @@ v.Na = exp(max(lnNa));
 
 % egg production and fitness ------------------------
 % one-generation calculation; ignores timing and internal life-history mismatch
-Einc = C.G .* C.W; % energy put into income egg prod.
+Einc = v.G .* v.W; % energy put into income egg prod.
 Einc(~isadult) = 0;
-C.Finc = sum(Einc.*exp(C.lnN)) .* params.dt ./ C.We_theo;
+v.Finc = sum(Einc.*exp(v.lnN)) .* p.dt ./ v.We_theo;
 	% lifetime eggs per egg, from adult accumulation of energy (i.e., income)
-C.Fcap = 0.5 .* C.Wa .* C.Na ./ C.We_theo;
+v.Fcap = 0.5 .* v.Wa .* v.Na ./ v.We_theo;
 	% lifetime eggs per egg, from juvenile accumulation of energy, stored
 	% in the form of body mass W (i.e., capital)
 	% note the magic number 0.5!
-C.F = C.Finc + C.Fcap;
-C.capfrac = C.Fcap ./ C.F;
+v.F = v.Finc + v.Fcap;
+v.capfrac = v.Fcap ./ v.F;
 
 
 % organise output into structures ----------------------------------------------
