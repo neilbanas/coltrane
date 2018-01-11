@@ -150,6 +150,21 @@ elseif strcmpi(pf.scenario,'disko')
 	fsum = forcing0.t > pf.tPspr & forcing0.t < pf.tPaut;
 	forcing0.P(fsum) = max(forcing0.P(fsum),pf.P0sum);
 
+
+% ------------------------------------------------------------------------------
+% NE Pacific from Sofia Ferreira's satellite analysis
+elseif strcmpi(pf.scenario,'nep-satellite')
+	nep = load('~/Dropbox/coltrane/work/10 nep/NEP_satellite_forcing');
+	pf = setDefault(pf,'year',nep.yr); % default is to average all years
+	pf = setDefault(pf,'region',1:size(nep.P,1));
+		% default is to average all along-coast regions
+	
+	yri = find(ismember(nep.yr,pf.year));
+	forcing0.P = mean(mean(nep.P(pf.region,[1:365 1],yri),1),3);
+	forcing0.T = mean(mean(nep.T0(pf.region,[1:365 1],yri),1),3);
+	forcing0.Tb = mean(mean(nep.Tb(pf.region,[1:365 1],yri),1),3);
+
+
 % ------------------------------------------------------------------------------
 else
 	disp(['what is ' pf.scenario '?']);
