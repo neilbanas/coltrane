@@ -1,11 +1,9 @@
-function p = coltraneParams_dia18(varargin);
+function p = coltraneParams(varargin);
 
-% p = coltraneParams_dia18('param1',val1,'param2',val2,...);
+% p = coltraneParams('param1',val1,'param2',val2,...);
 %
 % returns a complete set of parameters for coltraneModel.m. Specify whichever
 % non-default values you like and this will fill in the rest.
-%
-% "dia18" (DIAPOD, 2018) version.
 
 p = struct(varargin{:});
 
@@ -40,6 +38,7 @@ p=setDefault(p,'rm',0.8 * 0.17);
 p=setDefault(p,'rb',0.25); % metabolism at a=0 as fraction of metabolism at a=1
 p=setDefault(p,'capitalEfficiency',0.5);
 
+p=setDefault(p,'preySatVersion','');
 p=setDefault(p,'tIA',45);
 	% yearday after which it's assumed that ice contains ice algae
 p=setDefault(p,'iceToSat',1);

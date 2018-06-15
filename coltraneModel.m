@@ -41,20 +41,27 @@ function v = coltraneModel(particles,p,ind);
 
 
 % setup ------------------------------------------------------------------------
+% keep only particles with indices _ind_
+if nargin < 3
+	ind = 1:size(particles.t(:,:),2);
+end
+fields = fieldnames(particles);
+for i=1:length(fields)
+	particles.(fields{i}) = particles.(fields{i})(:,ind);
+		% this is worth doing even if ind isn't specified, since it reshapes
+		% dimensions 2,3,... into a flat list
+end
 % calculate yearday, if it wasn't supplied
 if ~isfield(particles,'yday')
 	particles.yday = reshape(yearday(particles.t),size(particles.t));
 end
-% keep only particles with indices _ind_
-if nargin > 2
-	fields = fieldnames(particles);
-	for i=1:length(fields)
-		particles.(fields{i}) = particles.(fields{i})(:,ind);
-	end
-end
+% and having done so, work in relative date, not calendar date. This makes it
+% possible to run a single run across particles from multiple years
+[NT,NP] = size(particles.t); % # timesteps, # particles
+particles.calendar_date_offset = particles.t(1,:);
+particles.t = particles.t - repmat(particles.t(1,:),[NT 1]);
 % create cohorts by varying spawning date. This copies everything in _particles_
 % over into the massive output structure v
-[NT,NP] = size(particles.t); % # timesteps, # particles
 dt = particles.t(2) - particles.t(1);
 	% makes the simulation timestep match the forcing time series, rather than
 	% the other way around.
@@ -79,7 +86,7 @@ v = preySaturation(v,p);
 if p.myopicDiapause
 	sat_crit = p.rm .* (1-p.rb) ./ p.r_assim ... 
 			 + p.GGE_nominal .* p.m0_over_GGE_I0 .* p.r_assim;
-	v.a = double(v.sat >= sat_crit);
+	v.a = v.sat >= sat_crit;
 else % an explicit range of yeardays
 	if p.tdia_enter > p.tdia_exit
 		v.a = ~(v.yday >= p.tdia_enter | v.yday <= p.tdia_exit);
@@ -87,6 +94,7 @@ else % an explicit range of yeardays
 		v.a = ~(v.yday >= p.tdia_enter & v.yday <= p.tdia_exit);
 	end 
 end
+v.a = double(v.a);
 % keep track of average prey saturation during the a=0 and a=1 periods-
 % this isn't used in the model but could be a useful diagnostic
 v.sata0 = sum(v.sat .* double(v.a==0)) ./ sum(double(v.a==0));
@@ -94,10 +102,7 @@ v.sata1 = sum(v.sat .* double(v.a==1)) ./ sum(double(v.a==1));
 
 
 % temperature response factors -------------------------------------------------
-% this has been simplified by assuming temp is independent of activity level,
-% which is perhaps appropriate for shallow shelves but not for deep basins.
-% to restore the Coltrane 1.0 behaviour, use an effective temperature
-% temp = v.a .* v.T_surface + (1-v.a) .* v.T_deep;
+v.temp = v.a .* v.T0 + (1-v.a) .* v.Td;
 v.qd = (p.Q10d^0.1) .^ v.temp;
 v.qg = (p.Q10g^0.1) .^ v.temp;
 
@@ -200,9 +205,8 @@ v.capfrac = v.Fcap ./ v.F;
 % clean up ---------------------------------------------------------------------
 fields = fieldnames(v);
 for i=1:length(fields)
-	if size(v.(fields{i}),1) == size(v.t,1) && ~strcmpi(fields{i},'t')
+	if size(v.(fields{i}),1) == NT && ~strcmpi(fields{i},'t')
 		v.(fields{i})(~isalive) = nan;
-			% nothing happened before they were born
 	end
 end
 
@@ -224,14 +228,18 @@ v.starv_stress = max((1 - v.Wrel)./v.D);
 	% equivalent to the criterion Wrel >= 1 - c*D (e.g., if c=0.5, then animals 
 	% are allowed to metabolise half their body mass at adulthood)
 n0 = reshape(find(v.t == t0_3d),[1 NP NC]);
-v.x0 = v.x(n0); % locate the cohort in space at spawning (t0)
-v.y0 = v.y(n0);
-v.H0 = v.H(n0);
+if isfield(v,'x')
+	v.x0 = v.x(n0); % locate the cohort in space at spawning (t0)
+	v.y0 = v.y(n0);
+	v.H0 = v.H(n0);
+end
 v.activeSpawning = (v.a(n0) > 0); % spawned during an active period?
 n1yr = reshape(find(v.t == t0_3d + round(365/dt)*dt),[1 NP NC]);
-v.x1yr = v.x(n1yr); % locate the cohort 1 year after spawning
-v.y1yr = v.y(n1yr);
-v.H1yr = v.H(n1yr);
+if isfield(v,'x')
+	v.x1yr = v.x(n1yr); % locate the cohort 1 year after spawning
+	v.y1yr = v.y(n1yr);
+	v.H1yr = v.H(n1yr);
+end
 
 % summary of metrics available:
 % 	 development (based on D)
