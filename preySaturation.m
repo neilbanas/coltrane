@@ -46,5 +46,5 @@ elseif strcmpi(p.preySatVersion,'satellite_dia18')
 
 else
 	% generic version, as in Coltrane 1.0
-	v.sat = v.P ./ (params.Ks + v.P);
+	v.sat = v.P ./ (p.Ks + v.P);
 end
