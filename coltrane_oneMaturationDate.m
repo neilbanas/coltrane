@@ -1,4 +1,4 @@
-function v = coltrane_oneMaturationDate(v0,p,tadult);
+function v = coltrane_oneMaturationDate(v0,p,tadult,forceCompleteSolution);
 
 % v = coltrane_oneMaturationDate(v0,p,tadult);
 %
@@ -6,6 +6,8 @@ function v = coltrane_oneMaturationDate(v0,p,tadult);
 % tadult.
 %
 % see coltraneModel.m for fuller notes
+
+if nargin < 4, forceCompleteSolution = 0; end
 
 v = v0;
 % assumes forcing time series have been copied over and t0, tdia_enter,
@@ -35,11 +37,20 @@ dDdt_feeding = isalive .* p.u0 .* qd .* v.a .* v.sat;
 dDdt(isfeeding) = dDdt_feeding(isfeeding); % full formula 
 v.D = cumsum(dDdt) .* dt;
 v.D(v.D>1) = 1;
-% harmonise D(t) and the timing parameter tadult
+
+% check D(t) against tadult
 isadult = v.t >= tadult;
-v.D(:,any(v.D<1 & isadult)) = nan;
+toolate = any(v.D<1 & isadult);
+if all(toolate) & ~forceCompleteSolution
+	v.D = [];
+	return;
+	% if there are no good solutions at all, don't bother with the rest of the
+	% model. isempty(v.D) is the test of whether the model completed
+else
+	v.D(:,any(v.D<1 & isadult)) = nan;
 	% the easy way to harmonise them is to blank out the cases where
 	% tadult is too early to be a possible date of maturation given D(t) 
+end
 
 % pick a guess at adult size based on mean temperature in the forcing,
 % and pick a corresponding guess at egg size based on this.
@@ -102,13 +113,19 @@ lnNa(~isadult) = nan;
 v.Na = exp(max(lnNa));
 
 % egg production -------------------------------------------------------
+% income egg prod = GW during the adult period
 v.Einc = max(0, v.G .* v.W);
 v.Einc(~isadult) = 0;
-Ecap = p.capitalEfficiency .* v.Wa;	
-	% !!!!!!!!!!!!
-	% this should be revised to properly match v1.0--to be a time series
-v.E = v.Einc;
-v.capfrac = 1 - sum(v.Einc) ./ sum(v.E);
+% total capital egg prod is a sensible fraction of body size at the end of the
+% juvenile period, and then we spread this out over an interval dt_spawn
+% starting at t = tadult
+Ecap = zeros(size(v.Einc));
+sum_Ecap_dt = p.capitalEfficiency .* v.Wa;	
+ncap = v.t(:,1) >= tadult & v.t(:,1) < tadult + p.dt_spawn;
+num_ncap = sum(ncap);
+Ecap(ncap,:,:,:) = repmat(sum_Ecap_dt./num_ncap./dt,[num_ncap 1 1 1]);
+v.E = v.Einc + Ecap;
+v.capfrac = sum(Ecap) ./ sum(v.E);
 
 % fitness: one-generation calculation ----------------------------------
 % ignores timing and internal mismatch
@@ -131,6 +148,25 @@ v.starv_stress = max((1 - v.Wrel)./v.D);
 	% (e.g., if c=0.5, then animals are allowed to metabolise half their 
 	% body mass at adulthood)
 		
+% define viability (an additional filter on LEP1)
+% v.viable = v.activeSpawning & v.starv_stress < 1;
+v.viable = v.starv_stress < 1;
+v.LEP1 = v.LEP1 .* v.viable;
+v.LEP1(isnan(v.LEP1)) = 0;
+
+% weightings alone the diapause-strategy dimensions --------------------
+% relative contributions of each diapause strategy to the total fitness
+% of each t0 cohort (at a given tadult)
+v.diaStrategyFrac = v.LEP1 ./ ...
+	repmat(sum(sum(v.LEP1,3),4), [1 1 NDx NDn]);
+v.diaStrategyFrac(isnan(v.diaStrategyFrac)) = 0;
+% alternate weightings that just average together the ones that are tied for
+% max LEP
+maxLEP1 = repmat(max(max(v.LEP1,[],3),[],4),[1 1 NDx NDn]);
+nummax = repmat(sum(sum(maxLEP1,3),4),[1 1 NDx NDn]);
+v.diaStrategyFrac_opt = double(v.LEP1 == maxLEP1) ./ nummax;
+v.diaStrategyFrac_opt(isnan(v.diaStrategyFrac_opt)) = 0;
+
 % clean up -------------------------------------------------------------
 fields = fieldnames(v);
 for i=1:length(fields)
@@ -138,3 +174,4 @@ for i=1:length(fields)
 		v.(fields{i})(~isalive) = nan;
 	end
 end
+

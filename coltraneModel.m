@@ -1,4 +1,4 @@
-function v = coltraneModel(forcing,p);
+function [v,vw,vo] = coltraneModel(forcing,p);
 
 % v = coltraneModel(forcing,p);
 %
@@ -63,22 +63,18 @@ v0.tdia_enter = repmat(reshape(tdia_enter, [1 1 1 NDn]), [1 NC NDx 1]);
 % for each value of tadult...
 for i = 1:NAd
 	disp(num2str(i));
+	forceCompletion = (i==1);
 	
 	% calculate development, growth, mortality, egg production, and 
 	% one-generation fitness: a(t), D(t), W(t), E(t), N(t), LEP1
-	vi = coltrane_oneMaturationDate(v0,p,tadult(i));
+	vi = coltrane_oneMaturationDate(v0,p,tadult(i),forceCompletion);
 	
-	% define viability--i.e. an additional filter on LEP1
-	% vi.viable = vi.activeSpawning & vi.starv_stress < 1;
-	vi.viable = vi.starv_stress < 1;
-	vi.LEP1 = vi.LEP1 .* vi.viable;
-	% relative contributions of each diapause strategy to the total fitness
-	% of each t0 cohort (at a given tadult)
-	vi.diaStrategyFrac = vi.LEP1 ./ ...
-		repmat(sum(sum(vi.LEP1,3),4), [1 1 NDx NDn]);
+	% if the run stopped early because v.D didn't line up with tadult, just
+	% leave this slice filled with nans and move along
+	if isempty(vi.D), continue; end
 	
-	% keep selected time series ...
-	timeSeriesToKeep = {'a','D','G','W','lnN','E'};
+	% keep selected full time series ...
+	timeSeriesToKeep = {'D','lnN','E'};
 	for k=1:length(timeSeriesToKeep)
 		thevar = timeSeriesToKeep{k};
 		if i==1, v.(thevar) = repmat(nan,[NT NC NDx NDn NAd]); end
@@ -90,6 +86,30 @@ for i = 1:NAd
 		if size(vi.(fields{k}),1)==1
 			if i==1, v.(fields{k}) = repmat(nan,[1 NC NDx NDn NAd]); end
 			v.(fields{k})(:,:,:,:,i) = vi.(fields{k});
+		end
+	end
+	
+	% consolidate over the diapause-strategy dimensions
+	vi.diaStrategyFrac_4d = repmat(vi.diaStrategyFrac,[NT 1 1 1]);
+	vi.diaStrategyFrac_opt_4d = repmat(vi.diaStrategyFrac_opt,[NT 1 1 1]);
+	for k=1:length(fields)
+		N1 = size(vi.(fields{k}),1);
+		if N1==1
+			if i==1, vw.(fields{k}) = repmat(nan,[1 NC NAd]); end
+			var_w = vi.(fields{k}) .* vi.diaStrategyFrac;
+			var_w(isnan(var_w)) = 0;
+			vw.(fields{k})(:,:,i) = squeeze(sum(sum(var_w,3),4));
+			var_w = vi.(fields{k}) .* vi.diaStrategyFrac_opt;
+			var_w(isnan(var_w)) = 0;
+			vo.(fields{k})(:,:,i) = squeeze(sum(sum(var_w,3),4));
+		else
+			if i==1, vo.(fields{k}) = repmat(nan,[NT NC NAd]); end
+			var_w = vi.(fields{k}) .* vi.diaStrategyFrac_4d;
+			var_w(isnan(var_w)) = 0;
+			vw.(fields{k})(:,:,i) = squeeze(sum(sum(var_w,3),4));
+			var_w = vi.(fields{k}) .* vi.diaStrategyFrac_opt_4d;
+			var_w(isnan(var_w)) = 0;
+			vo.(fields{k})(:,:,i) = squeeze(sum(sum(var_w,3),4));
 		end
 	end
 end
