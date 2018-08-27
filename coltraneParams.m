@@ -12,6 +12,12 @@ p = struct(varargin{:});
 % default; this makes the dependencies among parameters a little more
 % predictable. It may not be necessary at all.
  
+p=setDefault(p,'dt_spawn',10); % resolution (d) of spawning date cases
+p=setDefault(p,'tdia_exit',[]); % set of diapause exit dates to consider
+	% if this is empty, constructs a set using dt_dia below
+p=setDefault(p,'tdia_enter',[]); % diapause entry dates
+p=setDefault(p,'dt_dia',20);
+
 p=setDefault(p,'r_ea',0.013); % egg:adult weight ratio if exp_ea=1
 p=setDefault(p,'exp_ea',0.62); % egg weight = r_ea * adult weight^exp_ea
 	% Ki¿rboe and Sabatini 1995 (Table 1, Fig 1):
@@ -44,10 +50,6 @@ p=setDefault(p,'tIA',45);
 p=setDefault(p,'iceToSat',1);
 	% prey saturation in the presence of ice after yearday tIA
 	
-p=setDefault(p,'myopicDiapause',1);
-p=setDefault(p,'tdia_enter',90);
-p=setDefault(p,'tdia_exit',270);
-
 % set mortality (m0 = mortality at S = 1 µgC, T = 0)
 p=setDefault(p,'m0_over_GGE_I0',0.67);
 p=setDefault(p,'m0',p.m0_over_GGE_I0 * p.GGE_nominal * p.I0);

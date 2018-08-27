@@ -34,10 +34,9 @@ function v = coltraneModel(particles,p,ind);
 % 				then mortality, survivorship, and population dynamics (D,W,N).
 %		This will also make it possible for N to be density-dependent in a 
 %		future version.
-% * The myopic criterion for diapause is still available, but you also can
-%		specify diapause entry and exit dates--or rather, specify a matrix
-%		of these, run them all in a brute-force way, and then pick the combo
-%		that worked out best.
+% * The myopic criterion for diapause has been replaced by a matrix of entry
+%		and exit dates, which are considered in a brute-force way parallel
+% 		to spawning date.
 
 
 % setup ------------------------------------------------------------------------
@@ -64,36 +63,39 @@ particles.t = particles.t - repmat(particles.t(1,:),[NT 1]);
 % over into the massive output structure v
 dt = particles.t(2) - particles.t(1);
 	% makes the simulation timestep match the forcing time series, rather than
-	% the other way around.
-	% this needs sorting out. Perhaps at this point interpolate all the fields
-	% in _particles_ onto a new timebase specified by a parameter p.dt.
-	% Note that the original Coltrane model ran with an internal timestep of
-	% 0.5 d, but this was mainly to resolve sharp peaks in egg production in 
-	% very short growing seasons--a much longer timestep might be just as good.
-t0 = particles.t(1) + (0 : dt : 365); % the spawning dates to consider
-NC = length(t0); % # spawning dates
+	% the other way around
+
+t0 = particles.t(1) + (0 : p.dt_spawn : 365); % the spawning dates to consider
+NC = length(t0);
+tdia_exit = particles.t(1) + (0 : p.dt_dia : 365/2); % diapause exit dates
+NDx = length(tdia_exit);
+tdia_enter = max(tdia_exit) + p.dt_dia : p.dt_dia : 365; % entry dates
+NDn = length(tdia_enter);
+
+%{
+dimensions are
+	NT			NP			NC			NDx			NDn
+	timestep	particle	cohort/		exit date	entry date
+							spawn date
+so one timestep of the calculation has size [1 NP NC NDx NDn]
+%}	
 fields = fieldnames(particles);
 for i=1:length(fields)
-	v.(fields{i}) = repmat(particles.(fields{i}),[1 1 NC]);
+	v.(fields{i}) = repmat(particles.(fields{i}),[1 1 NC NDx NDn]);
 end
-v.t0 = repmat(reshape(t0,[1 1 NC]),[1 NP 1]);
-t0_3d = repmat(v.t0,[NT 1 1]);
+v.t0 = repmat(reshape(t0,			 	  [1 1 NC 1 1]), [1 NP 1 NDx NDn]);
+v.tdia_exit = repmat(reshape(tdia_exit,	  [1 1 1 NDx 1]),[1 NP NC 1 NDn]);
+v.tdia_enter = repmat(reshape(tdia_enter, [1 1 1 1 NDn]),[1 NP NC NDx 1]);
+t0_5d = repmat(v.t0,[NT 1 1 1 1]);
 
 % prey saturation --------------------------------------------------------------
 v = preySaturation(v,p);	
 	
 % activity: a(t)  --------------------------------------------------------------
-if p.myopicDiapause
-	sat_crit = p.rm .* (1-p.rb) ./ p.r_assim ... 
-			 + p.GGE_nominal .* p.m0_over_GGE_I0 .* p.r_assim;
-	v.a = v.sat >= sat_crit;
-else % an explicit range of yeardays
-	if p.tdia_enter > p.tdia_exit
-		v.a = ~(v.yday >= p.tdia_enter | v.yday <= p.tdia_exit);
-	else
-		v.a = ~(v.yday >= p.tdia_enter & v.yday <= p.tdia_exit);
-	end 
-end
+tdia_exit_5d = repmat(v.tdia_exit,[NT 1 1 1 1]);
+tdia_enter_5d = repmat(v.tdia_enter,[NT 1 1 1 1]);
+v.a = ~(v.yday >= tdia_enter_5d | v.yday <= tdia_exit_5d);
+	% assumes that tdia_enter > tdia_exit
 v.a = double(v.a);
 % keep track of average prey saturation during the a=0 and a=1 periods-
 % this isn't used in the model but could be a useful diagnostic
@@ -108,7 +110,7 @@ v.qg = (p.Q10g^0.1) .^ v.temp;
 
 
 % development: D(t) ------------------------------------------------------------
-isalive = v.t >= t0_3d; % spawned yet?
+isalive = v.t >= t0_5d; % spawned yet?
 dDdt = isalive .* p.u0 .* v.qd; % nonfeeding formula
 v.D = cumsum(dDdt) .* dt;
 isfeeding = v.D >= p.Df;
@@ -143,39 +145,38 @@ v.We_theo = p.r_ea .* v.Wa_theo .^ p.exp_ea;
 isgrowing = isfeeding & v.D < 1;
 satmean = sum(v.sat .* isgrowing) ./ sum(isgrowing);
 c = (1-p.theta) .* v.qg ./ v.qd .* p.I0 ./ p.u0 .* ...
-    (p.r_assim - p.rm ./ repmat(satmean,[NT 1 1]));
+    (p.r_assim - p.rm ./ repmat(satmean,[NT 1 1 1 1]));
 c = max(c,0);
 Wapprox = zeros(size(v.D));
-We_theo_3d = repmat(v.We_theo,[NT 1 1]);
-Wapprox(isgrowing) = ((We_theo_3d(isgrowing).^(1-p.theta)) + ...
+We_theo_5d = repmat(v.We_theo,[NT 1 1 1 1]);
+Wapprox(isgrowing) = ((We_theo_5d(isgrowing).^(1-p.theta)) + ...
 	c(isgrowing) .* (v.D(isgrowing) - p.Df)) .^ (1/(1-p.theta));
 % net gain over development (here stored as gain * W)
-ImaxW = v.qg .* p.I0 .* Wapprox .^ p.theta;
-	% only used at (isgrowing=1), not necessarily accurate beyond that
+ImaxW = zeros(size(Wapprox));
+ImaxW(isgrowing) = v.qg(isgrowing) .* p.I0 .* Wapprox(isgrowing) .^ p.theta;
 astar = p.rb + (1-p.rb) .* v.a;
 GW = zeros(size(v.D));
 GW(isgrowing) = ImaxW(isgrowing) .* ...
 	(v.a(isgrowing) .* p.r_assim .* v.sat(isgrowing) - ...
 	p.rm .* astar(isgrowing));
 % integrate to get the correct W over development
-v.W = We_theo_3d + cumsum(GW) .* dt;
+v.W = We_theo_5d + cumsum(GW) .* dt;
 v.W = max(0,v.W);
 % adult size Wa
-last = v.D(1:end-1,:,:) < 1 & v.D(2:end,:,:)==1;
-v.Wa = max(v.W(1:end-1,:,:) .* last);
-Wa_3d = repmat(v.Wa,[NT 1 1]);
-v.W(isadult) = Wa_3d(isadult);
+last = v.D(1:end-1,:,:,:,:) < 1 & v.D(2:end,:,:,:,:)==1;
+v.Wa = max(v.W(1:end-1,:,:,:,:) .* last);
+Wa_5d = repmat(v.Wa,[NT 1 1 1 1]);
+v.W(isadult) = Wa_5d(isadult);
 % calculate net gain during adulthood (used later to calculate egg production)
 % and fill in juvenile ingestion, metabolism, and net gain while we're at it
 Imax = v.qg .* p.I0 .* v.W.^(p.theta-1);
 Imax(~isfeeding) = 0;
-Imax(v.W < We_theo_3d) = 0;
+Imax(v.W < We_theo_5d) = 0;
 v.I = v.a .* p.r_assim .* v.sat .* Imax;
 	% this was r_assim * I, as opposed to I, in Coltrane 1.0
 v.M = p.rm .* astar .* Imax;
 v.G = v.I - v.M;
-% size relative to largest size previously attained
-v.Wrel = v.W ./ cummax(v.W);
+v.Wrel = v.W ./ cummax(v.W); % size relative to largest size previously attained
 
 
 % mortality and survivorship: N(t) ---------------------------------------------
@@ -213,28 +214,29 @@ end
 
 % metrics of viability and other classifications -------------------------------
 [yr0,~] = datevec(v.t0);
-yr0 = reshape(yr0,[1 NP NC]);
+yr0 = reshape(yr0,[1 NP NC NDx NDn]);
 [yra,~] = datevec(v.ta);
-yra = reshape(yra,[1 NP NC]);
+yra = reshape(yra,[1 NP NC NDx NDn]);
 v.numWinters = (yra - yr0);
 	% how many winters to reach adulthood (should be <= 1)
-first31dec = repmat(reshape(datenum(yr0,12,31), [1 NP NC]), [NT 1 1]);
+first31dec = repmat(reshape(datenum(yr0,12,31), [1 NP NC NDx NDn]), ...
+												[NT 1 1 1 1]);
 is31dec = abs(v.t-first31dec) == ...
-			  repmat(min(abs(v.t-first31dec)),[NT 1 1]);
-v.D_winter = reshape(v.D(is31dec),[1 NP NC]);
+			  repmat(min(abs(v.t-first31dec)),[NT 1 1 1 1]);
+v.D_winter = reshape(v.D(is31dec),[1 NP NC NDx NDn]);
 	% D in middle of first winter (should be > params.Ddia)
 v.starv_stress = max((1 - v.Wrel)./v.D);
 	% starvation stress. % this should be less than some threshhold c which is 
 	% equivalent to the criterion Wrel >= 1 - c*D (e.g., if c=0.5, then animals 
 	% are allowed to metabolise half their body mass at adulthood)
-n0 = reshape(find(v.t == t0_3d),[1 NP NC]);
+n0 = reshape(find(v.t == t0_5d),[1 NP NC NDx NDn]);
 if isfield(v,'x')
 	v.x0 = v.x(n0); % locate the cohort in space at spawning (t0)
 	v.y0 = v.y(n0);
 	v.H0 = v.H(n0);
 end
 v.activeSpawning = (v.a(n0) > 0); % spawned during an active period?
-n1yr = reshape(find(v.t == t0_3d + round(365/dt)*dt),[1 NP NC]);
+n1yr = reshape(find(v.t == t0_5d + round(365/dt)*dt),[1 NP NC NDx NDn]);
 if isfield(v,'x')
 	v.x1yr = v.x(n1yr); % locate the cohort 1 year after spawning
 	v.y1yr = v.y(n1yr);
