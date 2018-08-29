@@ -14,6 +14,7 @@ v = v0;
 % tdia_exit have been filled in
 dt = v.t(2) - v.t(1);
 [NT,NC,NDx,NDn] = size(v.t);
+v.dtegg = repmat(dtegg,[1 NC NDx NDn]);
 tegg = v.t0 + dtegg; % date that egg production starts, [1 NC NDx NDn]
 tegg_4d = repmat(tegg,[NT 1 1 1]);
 
@@ -63,6 +64,21 @@ else
 	% others, blank out the bad ones 
 end
 
+% D in middle of first winter
+[yr0,~] = datevec(v.t0);
+first31dec = repmat(reshape(datenum(yr0,12,31), [1 NC NDx NDn]), [NT 1 1 1]);
+is31dec = abs(v.t-first31dec) == ...
+			  repmat(min(abs(v.t-first31dec)),[NT 1 1 1]);
+v.D_winter = reshape(v.D(is31dec),[1 NC NDx NDn]);
+
+% flag time points at which the animal is in diapause but at a 
+% diapause-incapable stage (D < Ds in this version: Ddia has been dropped)
+isactive = isalive & v.a==1;
+hasbeenactive = (cumsum(isactive) >= 1);
+isfailingtodiapause = isalive & hasbeenactive & v.a==0 & v.D < p.Ds;
+hasfailedtodiapause = (cumsum(isfailingtodiapause)>1);
+v.D(hasfailedtodiapause) = nan;
+
 % pick a guess at adult size based on mean temperature in the forcing,
 % and pick a corresponding guess at egg size based on this.
 % in v1.0 these were called p.Wa0 and p.We0.
@@ -95,6 +111,12 @@ GW(isgrowing) = ImaxW(isgrowing) .* ...
 % integrate to get the correct W over development
 v.W = We_theo_4d + cumsum(GW) .* dt;
 v.W = max(0,v.W);
+% calculate the fraction of this which is reserves
+fs = ones(size(v.W));
+isstoringR = v.D >= p.Ds;
+fs(isstoringR) = (1-v.D(isstoringR)) ./ (1-p.Ds);
+fs(GW < 0) = 0;
+v.R = cumsum((1-fs).*GW) .* dt;
 % adult size Wa (= size at the moment egg prod begins)
 last = ~isineggprod(1:end-1,:,:,:) & isineggprod(2:end,:,:,:);
 v.Wa = max(v.W(1:end-1,:,:,:) .* last);
@@ -102,6 +124,10 @@ Wa_4d = repmat(v.Wa,[NT 1 1 1]);
 v.W(isineggprod) = Wa_4d(isineggprod);
 	% at this point, set W(t) = Wa throughout the egg-production phase;
 	% once we calculate Ecap(t) below, we will subtract it
+% likewise for reserves
+v.Ra = max(v.R(1:end-1,:,:,:) .* last); % the max() shouldn't be necessary
+Ra_4d = repmat(v.Ra,[NT 1 1 1]);
+v.R(isineggprod) = Ra_4d(isineggprod);
 % calculate net gain for the egg-prod phase
 % (and for the growth phase as well: previously we calculated GW but not G)
 Imax = qg .* p.I0 .* v.W.^(p.theta-1);
@@ -111,10 +137,11 @@ I = v.a .* p.r_assim .* v.sat .* Imax;
 	% this was r_assim * I, as opposed to I, in Coltrane 1.0
 M = p.rm .* astar .* Imax;
 v.G = I - M;
-v.Wrel = v.W ./ cummax(v.W);
-	% size relative to largest size previously attained
 
-% could check here for starvation
+% check for starvation
+isstarving = isgrowing & v.R < -p.rstarv .* v.W;
+isalive = isalive & cumsum(isstarving)==0;
+isineggprod = isineggprod & isalive;
 
 % mortality and survivorship: N(t) -------------------------------------
 v.m = p.m0 .* qg .* v.a .* v.W.^(p.theta-1); % mort. rate at T, size
@@ -127,42 +154,29 @@ v.Na = exp(max(lnNa));
 
 % egg production -------------------------------------------------------
 % income egg prod = GW once tegg is reached
-v.Einc = max(0, v.G .* v.W);
-v.Einc(~isineggprod) = 0;
-% total capital egg prod is a sensible fraction of body size at the end of the
-% growth period, and then we spread this out over an interval dt_spawn
-% starting at t = tegg
-Ecap = zeros(size(v.Einc));
-sum_Ecap_dt = p.capitalEfficiency .* v.Wa;	
-ncap = v.t(:,1) >= tegg & v.t(:,1) < tegg + p.dt_spawn;
-num_ncap = sum(ncap);
-Ecap(ncap,:,:,:) = repmat(sum_Ecap_dt./num_ncap./dt,[num_ncap 1 1 1]);
-v.E = v.Einc + Ecap;
+v.Einc = max(0, v.G .* v.W .* isineggprod);
+% start by calculating what capital egg prod would be if there were
+% inexhaustible energy for it
+Emax = zeros(size(v.G));
+Emax(isineggprod) = Imax(isineggprod) .* v.W(isineggprod);
+Ecap = max(0, Emax - v.Einc);
+% debit this from reserves until the point where it exceeds what's available
+% (may have an error up to Imax * dt)
+deltaR = cumsum(Ecap).*dt;
+toomuch = deltaR > Ra_4d;
+Ecap(toomuch) = 0;
+deltaR = cumsum(Ecap).*dt;
+v.R = v.R - deltaR;
+v.W = v.W - deltaR;
+% add them up
+v.E = (v.Einc + Ecap);
 v.capfrac = sum(Ecap) ./ sum(v.E);
 
 % fitness: one-generation calculation ----------------------------------
 % ignores timing and internal mismatch
 v.LEP1 = sum(v.E .* exp(v.lnN) .* dt) ./ v.We_theo;
-
-% metrics of viability and other classifications -----------------------
-[yr0,~] = datevec(v.t0);
-first31dec = repmat(reshape(datenum(yr0,12,31), [1 NC NDx NDn]), [NT 1 1 1 1]);
-is31dec = abs(v.t-first31dec) == ...
-			  repmat(min(abs(v.t-first31dec)),[NT 1 1 1 1]);
-v.D_winter = reshape(v.D(is31dec),[1 NC NDx NDn]);
-	% D in middle of first winter
-v.starv_stress = max((1 - v.Wrel)./v.D);
-	% starvation stress. % this should be less than some threshhold c
-	% which is equivalent to the criterion Wrel >= 1 - c*D
-	% (e.g., if c=0.5, then animals are allowed to metabolise half their 
-	% body mass at adulthood)
-		
-% define viability (an additional filter on LEP1)
-% v.viable = v.activeSpawning & v.starv_stress < 1;
-v.viable = v.starv_stress < 1;
-v.LEP1 = v.LEP1 .* v.viable;
 v.LEP1(isnan(v.LEP1)) = 0;
-
+		
 % weightings alone the diapause-strategy dimensions --------------------
 % relative contributions of each diapause strategy to the total fitness
 % of each t0 cohort (at a given dtegg)
@@ -172,15 +186,13 @@ v.diaStrategyFrac(isnan(v.diaStrategyFrac)) = 0;
 % alternate weightings that just average together the ones that are tied for
 % max LEP
 maxLEP1 = repmat(max(max(v.LEP1,[],3),[],4),[1 1 NDx NDn]);
-nummax = repmat(sum(sum(maxLEP1,3),4),[1 1 NDx NDn]);
-v.diaStrategyFrac_opt = double(v.LEP1 == maxLEP1) ./ nummax;
+ismax = double(v.LEP1 == maxLEP1);
+nummax = repmat(sum(sum(ismax,3),4),[1 1 NDx NDn]);
+v.diaStrategyFrac_opt = ismax ./ nummax;
 v.diaStrategyFrac_opt(isnan(v.diaStrategyFrac_opt)) = 0;
 
 % clean up -------------------------------------------------------------
-fields = fieldnames(v);
-for i=1:length(fields)
-	if size(v.(fields{i}),1) == NT && ~strcmpi(fields{i},'t')
-		v.(fields{i})(~isalive) = nan;
-	end
-end
-
+v.a(~isalive) = nan;
+v.D(~isalive) = nan;
+v.W(~isalive) = nan;
+v.R(~isalive) = nan;

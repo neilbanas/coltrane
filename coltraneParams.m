@@ -17,6 +17,8 @@ p=setDefault(p,'tdia_exit',[]); % set of diapause exit dates to consider
 	% if this is empty, constructs a set using dt_dia below
 p=setDefault(p,'tdia_enter',[]); % likewise for diapause entry dates
 p=setDefault(p,'dt_dia',20);
+p=setDefault(p,'dtegg',[]);
+	% if this is empty, constructs a set using min_ and max_genlength_years
 p=setDefault(p,'min_genlength_years',0);
 p=setDefault(p,'max_genlength_years',2);
 	% range of generation lengths to evaluate (in integer years)
@@ -47,7 +49,8 @@ p=setDefault(p,'rm',0.8 * 0.17);
 	% active metabolism as fraction of max assimilation
 	% 0.8*0.17 means that GGE = 0 at P = 0.25 Ks
 p=setDefault(p,'rb',0.25); % metabolism at a=0 as fraction of metabolism at a=1
-	
+p=setDefault(p,'rstarv',0.1); % starvation tolerance
+
 % set mortality (m0 = mortality at W = 1 µgC, T = 0)
 p=setDefault(p,'m0_over_GGE_I0',0.67);
 p=setDefault(p,'m0',p.m0_over_GGE_I0 * p.GGE_nominal * p.I0);
