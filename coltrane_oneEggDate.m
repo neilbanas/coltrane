@@ -64,7 +64,7 @@ else
 	% others, blank out the bad ones 
 end
 
-% D in middle of first winter
+% calculate D in middle of first winter, just as a diagnostic
 [yr0,~] = datevec(v.t0);
 first31dec = repmat(reshape(datenum(yr0,12,31), [1 NC NDx NDn]), [NT 1 1 1]);
 is31dec = abs(v.t-first31dec) == ...
@@ -78,6 +78,10 @@ hasbeenactive = (cumsum(isactive) >= 1);
 isfailingtodiapause = isalive & hasbeenactive & v.a==0 & v.D < p.Ds;
 hasfailedtodiapause = (cumsum(isfailingtodiapause)>1);
 v.D(hasfailedtodiapause) = nan;
+
+isalive = isalive & ~isnan(v.D);
+isineggprod = isineggprod & isalive;
+isgrowing = isgrowing & isalive;
 
 % pick a guess at adult size based on mean temperature in the forcing,
 % and pick a corresponding guess at egg size based on this.

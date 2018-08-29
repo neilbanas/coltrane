@@ -107,7 +107,7 @@ for i = 1:NE
 	
 	% consolidate over the diapause-strategy dimensions
 	vi.diaStrategyFrac_4d = repmat(vi.diaStrategyFrac,[NT 1 1 1]);
-	vi.diaStrategyFrac_opt_4d = repmat(vi.diaStrategyFrac_opt,[NT 1 1 1]);
+	vi.diaStrategyFrac_opt_4d = repmat(vi.diaStrategyFrac_opt,[NT 1 1 1]);	
 	vw.t0 = repmat(reshape(t0,[1 NC 1]),[1 1 NE]);
 	vo.t0 = repmat(reshape(t0,[1 NC 1]),[1 1 NE]);
 	vw.dtegg = repmat(reshape(dtegg,[1 1 NE]),[1 NC 1]);
