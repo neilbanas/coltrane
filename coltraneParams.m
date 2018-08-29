@@ -15,8 +15,18 @@ p = struct(varargin{:});
 p=setDefault(p,'dt_spawn',10); % resolution (d) of spawning date cases
 p=setDefault(p,'tdia_exit',[]); % set of diapause exit dates to consider
 	% if this is empty, constructs a set using dt_dia below
-p=setDefault(p,'tdia_enter',[]); % diapause entry dates
+p=setDefault(p,'tdia_enter',[]); % likewise for diapause entry dates
 p=setDefault(p,'dt_dia',20);
+p=setDefault(p,'min_genlength_years',0);
+p=setDefault(p,'max_genlength_years',2);
+	% range of generation lengths to evaluate (in integer years)
+
+p=setDefault(p,'preySatVersion','');
+p=setDefault(p,'tIA',45);
+	% yearday after which it's assumed that ice contains ice algae.
+	% see preySaturation.m for the values of preySatVersion in which it's used
+p=setDefault(p,'iceToSat',1);
+	% prey saturation in the presence of ice after yearday tIA
 
 p=setDefault(p,'r_ea',0.013); % egg:adult weight ratio if exp_ea=1
 p=setDefault(p,'exp_ea',0.62); % egg weight = r_ea * adult weight^exp_ea
@@ -24,7 +34,7 @@ p=setDefault(p,'exp_ea',0.62); % egg weight = r_ea * adult weight^exp_ea
 	% sac spawners: r_ea = 0.014, exp_ea = 1
 	% broadcast spawners: r_ea = 0.013, exp_ea = 0.62
 p=setDefault(p,'theta',0.7); % metabolic scaling exponent
-p=setDefault(p,'u0',0.009); % food-saturated development rate at T = 0 
+p=setDefault(p,'u0',0.008); % food-saturated development rate at T = 0 
 p=setDefault(p,'I0',0.4); % food-saturated ingestion rate at S=1 µgC, T=0
 p=setDefault(p,'GGE_nominal',0.33); % for relating adult size to I0 and u0.
 p=setDefault(p,'Q10g',2.5); % Q10 for growth and ingestion
@@ -32,25 +42,13 @@ p=setDefault(p,'Q10d',3); % Q10 for development
 p=setDefault(p,'Ks',1); % prey half-saturation; same units as P
 p=setDefault(p,'Df',0.10); % age of first feeding (0.10 = start of N3)
 p=setDefault(p,'Ds',0.35); % age at which to start storing lipids
-p=setDefault(p,'Ddia',0.49);
-	% minimum age of diapause (0.73 = C5; 0 = full flexibility)
-p=setDefault(p,'tegg',0);
-	% time at which to start reproducing, maturation permitting
-p=setDefault(p,'r_assim',0.67); % assimilation as fraction of ingestion
+p=setDefault(p,'r_assim',0.67); % assimilation efficiency of ingestion
 p=setDefault(p,'rm',0.8 * 0.17);
 	% active metabolism as fraction of max assimilation
 	% 0.8*0.17 means that GGE = 0 at P = 0.25 Ks
-	% 0.17 means that GGE = 0 at sat = 0.25
 p=setDefault(p,'rb',0.25); % metabolism at a=0 as fraction of metabolism at a=1
-p=setDefault(p,'capitalEfficiency',0.5);
-
-p=setDefault(p,'preySatVersion','');
-p=setDefault(p,'tIA',45);
-	% yearday after which it's assumed that ice contains ice algae
-p=setDefault(p,'iceToSat',1);
-	% prey saturation in the presence of ice after yearday tIA
 	
-% set mortality (m0 = mortality at S = 1 µgC, T = 0)
+% set mortality (m0 = mortality at W = 1 µgC, T = 0)
 p=setDefault(p,'m0_over_GGE_I0',0.67);
 p=setDefault(p,'m0',p.m0_over_GGE_I0 * p.GGE_nominal * p.I0);
 p.m0_over_GGE_I0 = p.m0./p.GGE_nominal./p.I0;

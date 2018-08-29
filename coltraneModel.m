@@ -27,6 +27,12 @@ function [v,vw,vo] = coltraneModel(forcing,p);
 % * The myopic criterion for diapause has been replaced by a matrix of entry
 %		and exit dates, which are considered in a brute-force way parallel
 % 		to spawning date.
+% * tegg has been replaced by dtegg, which is similar to (tegg - t0):
+%
+%	NT			NC			NDx			NDn			NE
+%	t			t0			tdia_exit	tdia_enter	dtegg
+%	timestep	spawn date	exit date	entry date	egg prod date
+%	(calendar)	(calendar)	(yearday)	(yearday)	(relative to t0)
 
 
 % calculate yearday, if it wasn't supplied
@@ -37,21 +43,21 @@ NT = size(forcing.t,1); % # timesteps
 % determine the simulation timestep from the forcing time series
 dt = forcing.t(2) - forcing.t(1);
 
-%	NT			NC			NDx			NDn			NAd
-%	timestep	cohort/		exit date	entry date	maturation date
-%				spawn date
 t0 = forcing.t(1) + (0 : p.dt_spawn : 365); % the spawning dates to consider
 NC = length(t0);
 tdia_exit = 0 : p.dt_dia : 365/2; % diapause exit yeardays
 NDx = length(tdia_exit);
 tdia_enter = (max(tdia_exit) + p.dt_dia) : p.dt_dia : 365; % entry dates
 NDn = length(tdia_enter);
-tadult = forcing.t(1) : p.dt_spawn : forcing.t(end); % dates of maturation
-	% figuring out how to run only a subset of the tadult cases would be a big
-	% efficiency boost
-NAd = length(tadult);
+dteggmin = (p.min_genlength_years - 0.5) .* 365;
+dteggmin = max(dteggmax, p.dt_tspawn);
+dteggmax = (p.max_genlength_years + 0.5) .* 365;
+dteggmax = min(dteggmax, forcing.t(end) - t0(end));
+dtegg = dteggmin : p.dt_spawn : dteggmax;
+	% the date that egg production begins relative to t0
+NE = length(dtegg);
 
-% set up a [NT NC NDx NDn] structure appropriate for a single value of tadult
+% set up a [NT NC NDx NDn] structure appropriate for a single value of dtegg
 fields = fieldnames(forcing);
 for i=1:length(fields)
 	v0.(fields{i}) = repmat(forcing.(fields{i}),[1 NC NDx NDn]);
@@ -60,16 +66,16 @@ v0.t0 = repmat(reshape(t0, [1 NC 1]), [1 1 NDx NDn]);
 v0.tdia_exit = repmat(reshape(tdia_exit, [1 1 NDx 1]), [1 NC 1 NDn]);
 v0.tdia_enter = repmat(reshape(tdia_enter, [1 1 1 NDn]), [1 NC NDx 1]);
 
-% for each value of tadult...
-for i = 1:NAd
+% for each value of dtegg...
+for i = 1:NE
 	disp(num2str(i));
 	forceCompletion = (i==1);
 	
 	% calculate development, growth, mortality, egg production, and 
 	% one-generation fitness: a(t), D(t), W(t), E(t), N(t), LEP1
-	vi = coltrane_oneMaturationDate(v0,p,tadult(i),forceCompletion);
+	vi = coltrane_oneMaturationDate(v0,p,dtegg(i),forceCompletion);
 	
-	% if the run stopped early because v.D didn't line up with tadult, just
+	% if the run stopped early because v.D is inconsistent with dtegg, just
 	% leave this slice filled with nans and move along
 	if isempty(vi.D), continue; end
 	
@@ -77,14 +83,14 @@ for i = 1:NAd
 	timeSeriesToKeep = {'D','lnN','E'};
 	for k=1:length(timeSeriesToKeep)
 		thevar = timeSeriesToKeep{k};
-		if i==1, v.(thevar) = repmat(nan,[NT NC NDx NDn NAd]); end
+		if i==1, v.(thevar) = repmat(nan,[NT NC NDx NDn NE]); end
 		v.(thevar)(:,:,:,:,i) = vi.(thevar);
-	end
+	endq
 	% ... and all scalars
 	fields = fieldnames(vi);
 	for k=1:length(fields)
 		if size(vi.(fields{k}),1)==1
-			if i==1, v.(fields{k}) = repmat(nan,[1 NC NDx NDn NAd]); end
+			if i==1, v.(fields{k}) = repmat(nan,[1 NC NDx NDn NE]); end
 			v.(fields{k})(:,:,:,:,i) = vi.(fields{k});
 		end
 	end
@@ -95,7 +101,7 @@ for i = 1:NAd
 	for k=1:length(fields)
 		N1 = size(vi.(fields{k}),1);
 		if N1==1
-			if i==1, vw.(fields{k}) = repmat(nan,[1 NC NAd]); end
+			if i==1, vw.(fields{k}) = repmat(nan,[1 NC NE]); end
 			var_w = vi.(fields{k}) .* vi.diaStrategyFrac;
 			var_w(isnan(var_w)) = 0;
 			vw.(fields{k})(:,:,i) = squeeze(sum(sum(var_w,3),4));
@@ -103,7 +109,7 @@ for i = 1:NAd
 			var_w(isnan(var_w)) = 0;
 			vo.(fields{k})(:,:,i) = squeeze(sum(sum(var_w,3),4));
 		else
-			if i==1, vo.(fields{k}) = repmat(nan,[NT NC NAd]); end
+			if i==1, vo.(fields{k}) = repmat(nan,[NT NC NE]); end
 			var_w = vi.(fields{k}) .* vi.diaStrategyFrac_4d;
 			var_w(isnan(var_w)) = 0;
 			vw.(fields{k})(:,:,i) = squeeze(sum(sum(var_w,3),4));
