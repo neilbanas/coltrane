@@ -1,4 +1,4 @@
-function [v,vw,vo] = coltraneModel(forcing,p);
+function [v,fl] = coltraneModel(forcing,p,chunkSize);
 
 % v = coltraneModel(forcing,p);
 %
@@ -33,17 +33,20 @@ function [v,vw,vo] = coltraneModel(forcing,p);
 %	t			t0			tdia_exit	tdia_enter	dtegg
 %	timestep	spawn date	exit date	entry date	egg prod date
 %	(calendar)	(calendar)	(yearday)	(yearday)	(relative to t0)
+%
+% the last three dimensions are folded into a single strategy vector s.
 
+
+if nargin<3, chunkSize = 500; end
 
 % calculate yearday, if it wasn't supplied
 if ~isfield(forcing,'yday')
 	forcing.yday = reshape(yearday(forcing.t),size(forcing.t));
 end
 NT = size(forcing.t,1); % # timesteps
-% determine the simulation timestep from the forcing time series
-dt = forcing.t(2) - forcing.t(1);
 
-% vectors of timing parameters
+
+% vectors of timing parameters t0, tdia_exit, tdia_enter, dtegg
 t0 = forcing.t(1) + (0 : p.dt_spawn : 365); % the spawning dates to consider
 NC = length(t0);
 tdia_exit = p.tdia_exit;
@@ -67,72 +70,52 @@ if isempty(dtegg)
 end
 NE = length(dtegg);
 
-% set up a [NT NC NDx NDn] structure appropriate for a single value of dtegg
-fields = fieldnames(forcing);
-for i=1:length(fields)
-	v0.(fields{i}) = repmat(forcing.(fields{i}),[1 NC NDx NDn]);
-end
-v0.t0 = repmat(reshape(t0, [1 NC 1]), [1 1 NDx NDn]);
-v0.tdia_exit = repmat(reshape(tdia_exit, [1 1 NDx 1]), [1 NC 1 NDn]);
-v0.tdia_enter = repmat(reshape(tdia_enter, [1 1 1 NDn]), [1 NC NDx 1]); 
 
-% for each value of dtegg...
-for i = 1:NE
-	disp(num2str(i));
-	forceCompletion = (i==1);
-	
-	% calculate development, growth, mortality, egg production, and 
-	% one-generation fitness: a(t), D(t), W(t), E(t), N(t), LEP1
-	vi = coltrane_oneEggDate(v0,p,dtegg(i),forceCompletion);
-	
-	% if the run stopped early because v.D is inconsistent with dtegg, just
-	% leave this slice filled with nans and move along
-	if isempty(vi.D), continue; end
-	
-	% keep selected full time series ...
-	timeSeriesToKeep = {'D','lnN','E','W','R','a','Einc'};
-	for k=1:length(timeSeriesToKeep)
-		thevar = timeSeriesToKeep{k};
-		if i==1, v.(thevar) = repmat(nan,[NT NC NDx NDn NE]); end
-		v.(thevar)(:,:,:,:,i) = vi.(thevar);
-	end
-	% ... and all scalars (meaning non-time series)
-	fields = fieldnames(vi);
-	for k=1:length(fields)
-		if size(vi.(fields{k}),1)==1
-			if i==1, v.(fields{k}) = repmat(nan,[1 NC NDx NDn NE]); end
-			v.(fields{k})(:,:,:,:,i) = vi.(fields{k});
-		end
-	end
-	
-	% consolidate over the diapause-strategy dimensions
-	vi.diaStrategyFrac_4d = repmat(vi.diaStrategyFrac,[NT 1 1 1]);
-	vi.diaStrategyFrac_opt_4d = repmat(vi.diaStrategyFrac_opt,[NT 1 1 1]);	
-	vw.t0 = repmat(reshape(t0,[1 NC 1]),[1 1 NE]);
-	vo.t0 = repmat(reshape(t0,[1 NC 1]),[1 1 NE]);
-	vw.dtegg = repmat(reshape(dtegg,[1 1 NE]),[1 NC 1]);
-	vo.dtegg = repmat(reshape(dtegg,[1 1 NE]),[1 NC 1]);
-	for k=1:length(fields)
-		N1 = size(vi.(fields{k}),1);
-		if N1==1 && ~strcmpi(fields{k},'diaStrategyFrac') ...
-				 && ~strcmpi(fields{k},'diaStrategyFrac_opt') ...
-				 && ~strcmpi(fields{k},'t0') ...
-				 && ~strcmpi(fields{k},'dtegg') ...
-			if i==1, vw.(fields{k}) = repmat(nan,[1 NC NE]); end
-			var_w = vi.(fields{k}) .* vi.diaStrategyFrac;
-			var_w(isnan(var_w)) = 0;
-			vw.(fields{k})(:,:,i) = squeeze(sum(sum(var_w,3),4));
-			var_w = vi.(fields{k}) .* vi.diaStrategyFrac_opt;
-			var_w(isnan(var_w)) = 0;
-			vo.(fields{k})(:,:,i) = squeeze(sum(sum(var_w,3),4));
-		elseif N1==NT
-			if i==1, vo.(fields{k}) = repmat(nan,[NT NC NE]); end
-			var_w = vi.(fields{k}) .* vi.diaStrategyFrac_4d;
-			var_w(isnan(var_w)) = 0;
-			vw.(fields{k})(:,:,i) = squeeze(sum(sum(var_w,3),4));
-			var_w = vi.(fields{k}) .* vi.diaStrategyFrac_opt_4d;
-			var_w(isnan(var_w)) = 0;
-			vo.(fields{k})(:,:,i) = squeeze(sum(sum(var_w,3),4));
-		end
-	end
+% construct the strategy vector _s_ (conceptually a vector, but in practice a
+% structure)
+[s.tdia_exit, s.tdia_enter, s.dtegg] = ndgrid(tdia_exit, tdia_enter, dtegg);
+NS = NDx * NDn * NE; % total number of strategy combinations
+
+
+% evaluate the full fitness landscape, one chunk of strategies at a time
+%chunkSize = 500;
+ind0 = [(1 : chunkSize : NS) NS+1];
+dF1 = nan.*ones([NT NC NS]);
+clear dF1chunks
+for i = 1:length(ind0)-1
+	disp(i);
+	ind = (ind0(i) : ind0(i+1)-1);
+	si = selectRows(s,ind);
+	dF1chunks{i} = coltrane_integrate(forcing,p,t0,si,'fitness only');
+		% dF1 = E N / We
+end
+for i=1:length(dF1chunks)
+	ind = (ind0(i) : ind0(i+1)-1);
+	dF1(:,:,ind) = dF1chunks{i};
+end
+fl = fitnessLandscape(dF1,forcing.t,t0,s);
+fl.forcing = forcing;
+fl.p = p;
+
+
+% filter strategy landscape by 2-gen fitness
+fit = find(any(fl.F2 >= 1)); % s is a fit strategy if F2(t0,s)>1 for some t0
+NS = length(fit);
+disp([num2str(NS) ' strategies selected. Output structure will be about ' ...
+	num2str(20*4*NT*NC*NS/1e9) ' GB.']);
+s = selectRows(s, fit);
+
+
+% rerun model, saving full output for the fit cohorts and strategies
+v = coltrane_integrate(forcing,p,t0,s,'everything');
+
+
+
+
+
+% ------------------------------------------------------------------------------
+function si = selectRows(s,ind)
+fields = fieldnames(s);
+for k=1:length(fields)
+	si.(fields{k}) = s.(fields{k})(ind);
 end

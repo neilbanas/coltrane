@@ -14,8 +14,9 @@ p = struct(varargin{:});
  
 p=setDefault(p,'dt_spawn',10); % resolution (d) of spawning date cases
 p=setDefault(p,'tdia_exit',[]); % set of diapause exit dates to consider
-	% if this is empty, constructs a set using dt_dia below
-p=setDefault(p,'tdia_enter',[]); % likewise for diapause entry dates
+	% if this is empty, constructs a set using dt_dia
+p=setDefault(p,'tdia_enter',[]); % set of diapause entry dates to consider
+	% if this is empty, constructs a set using dt_dia
 p=setDefault(p,'dt_dia',20);
 p=setDefault(p,'dtegg',[]);
 	% if this is empty, constructs a set using min_ and max_genlength_years
@@ -23,12 +24,14 @@ p=setDefault(p,'min_genlength_years',0);
 p=setDefault(p,'max_genlength_years',2);
 	% range of generation lengths to evaluate (in integer years)
 
+
 p=setDefault(p,'preySatVersion','');
 p=setDefault(p,'tIA',45);
 	% yearday after which it's assumed that ice contains ice algae.
 	% see preySaturation.m for the values of preySatVersion in which it's used
 p=setDefault(p,'iceToSat',1);
 	% prey saturation in the presence of ice after yearday tIA
+
 
 p=setDefault(p,'r_ea',0.013); % egg:adult weight ratio if exp_ea=1
 p=setDefault(p,'exp_ea',0.62); % egg weight = r_ea * adult weight^exp_ea
@@ -44,6 +47,13 @@ p=setDefault(p,'Q10d',3); % Q10 for development
 p=setDefault(p,'Ks',1); % prey half-saturation; same units as P
 p=setDefault(p,'Df',0.10); % age of first feeding (0.10 = start of N3)
 p=setDefault(p,'Ds',0.35); % age at which to start storing lipids
+						   % (0.35 = start of C1)
+p=setDefault(p,'Ddia',0.6); % minimum diapause-capable stage (0.6 = start of C4;
+							% (alternatively this can be set to 0 or Ds and 
+							% evaluated in postprocessing)
+p=setDefault(p,'requireActiveSpawning',0);
+	% omit cases in which t0 falls during the diapause period, and set E=0
+	% during diapause as well
 p=setDefault(p,'r_assim',0.67); % assimilation efficiency of ingestion
 p=setDefault(p,'rm',0.8 * 0.17);
 	% active metabolism as fraction of max assimilation
