@@ -185,7 +185,7 @@ end
 % start by calculating what capital egg prod would be if there were
 % inexhaustible energy for it
 Emax = zeros(size(v.G));
-Emax(isineggprod) = Imax(isineggprod) .* v.W(isineggprod);
+Emax(isineggprod) = p.r_assim .* Imax(isineggprod) .* v.W(isineggprod);
 if p.requireActiveSpawning
 	Emax = Emax .* v.a;
 end
