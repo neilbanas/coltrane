@@ -1,6 +1,7 @@
 function OUT = coltrane_integrate(forcing,p,t0,s,whatToSave);
 
 %   v = coltrane_integrate(forcing,p,t0,s,'everything');
+%   								  ...,'scalars only');
 % dF1 = coltrane_integrate(forcing,p,t0,s,'fitness only');
 %
 % calculates a(t), D(t), W(t), N(t), E(t), and dF1 for set of spawning dates t0
@@ -205,10 +206,14 @@ v.capfrac = sum(Ecap) ./ sum(v.E);
 % contributions to fitness at each t -------------------------------------------
 v.dF1 = (v.E .* exp(v.lnN) .* dt) ./ v.We_theo;
 v.dF1(isnan(v.dF1)) = 0;
+v.tEcen = sum(v.t .* v.dF1) ./ sum(v.dF1); % center of mass of E*N
+	% this minus t0 is generation length
 		
 % clean up -------------------------------------------------------------
 if strcmpi(whatToSave,'fitness only')
 	OUT = v.dF1;
+elseif strcmpi(whatToSave,'scalars only')
+	OUT = keepScalars(v);
 else
 	v.a(~isalive) = nan;
 	v.D(~isalive) = nan;
