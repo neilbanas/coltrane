@@ -32,6 +32,7 @@ tegg_3d = repmat(tegg,[NT 1 1]);
 
 dF1 = zeros(NT,NC,NS);
 
+
 % activity: a(t) ------------------------------------------------------
 v.a = double(~(v.yday >= repmat(v.tdia_enter,[NT 1 1]) | ...
 			   v.yday <= repmat(v.tdia_exit,[NT 1 1])));
@@ -125,14 +126,16 @@ v.R = zeros(size(v.D));
 v.Einc = zeros(size(v.D));
 v.E = zeros(size(v.D));
 astar = p.rb + (1-p.rb) .* v.a;
+
 for n=1:NT-1
-	f = isfeeding(n,:);
+	f = isfeeding(n,:); g = isgrowing(n,:); e = isineggprod(n,:);
 	% net gain
 	Imax_nf = qg(n,f) .* p.I0 .* v.W(n,f).^(p.theta-1);
 	I_nf = v.a(n,f) .* p.r_assim .* v.sat(n,f) .* Imax_nf;
 	M_nf = p.rm .* astar(n,f) .* Imax_nf;
 	v.G(n,f) = I_nf - M_nf;
-	GWdt = v.G(n,:) .* v.W(n,:) .* dt;
+    GWdt = v.G(n,:) .* v.W(n,:) .* dt;
+    energyLost = GWdt < 0;
 	% allocation to growth
 	dW = GWdt;
 	dW(dW>0 & isineggprod(n,:)) = 0;
@@ -140,19 +143,21 @@ for n=1:NT-1
 	% allocation to reserves
 	fr = (v.D(n,:) - p.Ds) ./ (1 - p.Ds);
 	fr = max(0,min(1,fr));
-	fr(GWdt < 0) = 1; % all net losses come from R
-	v.R(n+1,:) = v.R(n,:) + fr .* GWdt;
-	% income egg production
-	v.Einc(n,:) = max(0,GWdt) .* isineggprod(n,:);
+	fr(energyLost) = 1; % all net losses come from R
+    v.R(n+1,g) = v.R(n,g) + fr(g) .* GWdt(g);
+    v.R(n+1,e) = v.R(n,e) + energyLost(e) .* fr(e) .* GWdt(e);        
+    % income egg production
+    v.Einc(n,:) = max(0,GWdt) .* e;
 	% capital egg production
 	Emax = zeros(size(GWdt));
-	Emax(f) = p.r_assim .* Imax_nf .* isineggprod(n,f);
-	Ecap = max(0, Emax - v.Einc(n,:));
-	dE = min(max(0,v.R(n,:)), Ecap.*dt);
-	v.E(n,:) = v.Einc(n,:) + dE;
+	Emax(f) = p.r_assim .* Imax_nf .* isineggprod(n,f) .* v.W(n,f);
+    Ecap = max(0, Emax - v.Einc(n,:));
+    dE = min(max(0,v.R(n,:)), Ecap.*dt);
+    v.E(n,:) = v.Einc(n,:) + dE;
 	v.W(n+1,:) = v.W(n+1,:) - dE;
 	v.R(n+1,:) = v.R(n+1,:) - dE;
 end
+
 % adult size Wa, Ra (= size at the moment egg prod begins)
 last = ~isineggprod(1:end-1,:,:) & isineggprod(2:end,:,:);
 v.Wa = max(v.W(1:end-1,:,:) .* last);
@@ -163,7 +168,7 @@ v.We = p.r_ea .* v.Wa .^ p.exp_ea;
 v.capfrac = sum(v.E - v.Einc) ./ sum(v.E);
 
 % check for starvation
-isstarving = isgrowing & v.R < -p.rstarv .* v.W;
+isstarving = v.R < -p.rstarv .* v.W;
 isalive = isalive & cumsum(isstarving)==0;
 isineggprod = isineggprod & isalive;
 v.E(~isalive) = 0;
