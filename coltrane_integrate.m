@@ -68,6 +68,8 @@ dDdt_feeding = isalive .* p.u0 .* qd .* v.a .* v.sat;
 dDdt(isfeeding) = dDdt_feeding(isfeeding); % full formula 
 v.D = cumsum(dDdt) .* dt;
 v.D(v.D>1) = 1;
+isfeeding = v.D >= p.Df; % recalculated because cumsum() is one timestep
+						 % off from a true forward integration
 
 % the life history is divided into two phases, growth and egg production. 
 % This is equivalent to juvenile and adult if the animals delay their
@@ -138,8 +140,8 @@ for n=1:NT-1
     energyLost = GWdt < 0;
 	% allocation to growth
 	dW = GWdt;
-	dW(dW>0 & isineggprod(n,:)) = 0;
-	v.W(n+1,:) = v.W(n,:) + dW;
+	dW(dW>0 & e) = 0;
+	v.W(n+1,:) = max(0, v.W(n,:) + dW);
 	% allocation to reserves
 	fr = (v.D(n,:) - p.Ds) ./ (1 - p.Ds);
 	fr = max(0,min(1,fr));
@@ -150,7 +152,7 @@ for n=1:NT-1
     v.Einc(n,:) = max(0,GWdt) .* e;
 	% capital egg production
 	Emax = zeros(size(GWdt));
-	Emax(f) = p.r_assim .* Imax_nf .* isineggprod(n,f) .* v.W(n,f);
+	Emax(f) = p.r_assim .* Imax_nf .* e(f) .* v.W(n,f);
     Ecap = max(0, Emax - v.Einc(n,:));
     dE = min(max(0,v.R(n,:)), Ecap.*dt);
     v.E(n,:) = v.Einc(n,:) + dE;
@@ -187,7 +189,7 @@ v.dF1 = real(v.E .* exp(v.lnN) .* dt) ./ v.We_theo;
 v.dF1(isnan(v.dF1)) = 0;
 v.tEcen = sum(v.t .* v.dF1) ./ sum(v.dF1); % center of mass of E*N
 	% this minus t0 is generation length
-		
+		    
 % clean up ---------------------------------------------------------------------
 if strcmpi(whatToSave,'fitness only')
 	OUT = v.dF1;
