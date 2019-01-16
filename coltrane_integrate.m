@@ -1,20 +1,19 @@
-function OUT = coltrane_integrate(forcing,p,t0,s,whatToSave);
+function v = coltrane_integrate(forcing,p,t0,s,whatToSave);
 
-%   v = coltrane_integrate(forcing,p,t0,s,'everything');
-%   								  ...,'scalars only');
-% dF1 = coltrane_integrate(forcing,p,t0,s,'fitness only');
+% v = coltrane_integrate(forcing,p,t0,s,'everything');
+%   							    ...,'scalars only');
+%   								...,'scalars and fitness');
 %
-% calculates a(t), D(t), W(t), N(t), E(t), and dF1 for set of spawning dates t0
-% and a set of strategies s. The fields of s should be tdia_exit, tdia_enter,
+% calculates a(t), D(t), W(t), N(t), E(t), and dF1 for a set of spawning dates
+% t0 and a set of strategies s. The fields of s should be tdia_exit, tdia_enter,
 % and dtegg.
-%
-% the user doesn't call this; coltraneModel.m does.
 
 
 if nargin < 5, whatToSave = 'everything'; end
 
 v = forcing; % copy over forcing time series
 NT = size(v.t,1); % # timesteps
+v.yday = yearday(v.t); % make sure this is filled in and consistent
 % determine the simulation timestep from the forcing time series
 dt = v.t(2) - v.t(1);
 
@@ -30,22 +29,34 @@ end
 tegg = v.t0 + v.dtegg; % date that egg production starts, [1 NC NS]
 tegg_3d = repmat(tegg,[NT 1 1]);
 
-dF1 = zeros(NT,NC,NS);
-
+v.F1 = zeros(1,NC,NS);
+v.F2 = zeros(1,NC,NS);
 
 % activity: a(t) ------------------------------------------------------
 v.a = double(~(v.yday >= repmat(v.tdia_enter,[NT 1 1]) | ...
 			   v.yday <= repmat(v.tdia_exit,[NT 1 1])));
 	% assumes that tdia_enter > tdia_exit
-t0yday = reshape(yearday(v.t0),size(v.t0));
-activeSpawning = ~(t0yday >= v.tdia_enter | t0yday <= v.tdia_exit);
-tayday = reshape(yearday(v.t0+v.dtegg),size(v.t0));
-activeSpawning2 = ~(tayday >= v.tdia_enter | tayday <= v.tdia_exit);
-								
+isalive = v.t >= repmat(v.t0,[NT 1 1]); % born yet?
+if p.requireActiveSpawning
+	% eliminate (t0,s) combinations in which t0 falls during diapause
+	t0_yday = yearday(v.t0);
+	activeSpawning = ~(t0_yday >= v.tdia_enter | t0_yday <= v.tdia_exit);
+	isalive = isalive & repmat(activeSpawning,[NT 1 1]); 
+	% likewise (t0,s) combinations in which t0+dtegg falls during diapause
+	% (this eliminates some redundancy)
+	ta_yday = yearday(v.t0+v.dtegg);
+	activeNextSpawning = ~(ta_yday >= v.tdia_enter | ta_yday <= v.tdia_exit);
+	isalive = isalive & repmat(activeNextSpawning,[NT 1 1]); 
+end
+
+
 % temperature response factors: qd, qg  --------------------------------
 v.temp = v.a .* v.T0 + (1-v.a) .* v.Td;
-qd = (p.Q10d^0.1) .^ v.temp;
-qg = (p.Q10g^0.1) .^ v.temp;
+qd = zeros(NT,NC,NS);
+qd(isalive) = (p.Q10d^0.1) .^ v.temp(isalive);
+qg = zeros(NT,NC,NS);
+qg(isalive) = (p.Q10g^0.1) .^ v.temp(isalive);
+
 
 % prey saturation ------------------------------------------------------
 v = preySaturation(v,p);
@@ -53,14 +64,8 @@ if size(v.sat,2)==1
 	v.sat = repmat(v.sat(:),[1 NC NS]);
 end
 
+
 % development: D(t) ----------------------------------------------------
-isalive = v.t >= repmat(v.t0,[NT 1 1]); % spawned yet?
-if p.requireActiveSpawning
-	% eliminate (t0,s) combinations in which t0 falls during diapause
-	isalive = isalive & repmat(activeSpawning,[NT 1 1]); 
-	% likewise (t0,s) combinations in which t0+dtegg falls during diapause
-	isalive = isalive & repmat(activeSpawning2,[NT 1 1]); 
-end
 dDdt = isalive .* p.u0 .* qd; % nonfeeding formula
 v.D = cumsum(dDdt) .* dt;
 isfeeding = v.D >= p.Df;
@@ -82,7 +87,6 @@ isgrowing = v.D >= p.Df & ~isineggprod;
 toolate = any(v.D<1 & isineggprod);
 if all(toolate)
 	v.D = [];
-	if strcmpi(whatToSave,'fitness only'), OUT = dF1; else, OUT = v; end
 	return
 	% if there are no good solutions at all, don't bother with the rest of the
 	% model. isempty(v.D) is the test of whether the model completed
@@ -112,6 +116,7 @@ isfeeding = isfeeding & isalive;
 isgrowing = isgrowing & isalive;
 isineggprod = isineggprod & isalive;
 
+
 % pick a guess at adult size based on mean temperature in the forcing,
 % and pick a corresponding guess at egg size based on this.
 % in v1.0 these were called p.Wa0 and p.We0.
@@ -121,12 +126,13 @@ co = (1-p.theta) .* p.GGE_nominal .* (1-p.Df) .* qoverq;
 v.Wa_theo = (co .* p.I0 ./ p.u0) .^ (1./(1-p.theta));
 v.We_theo = p.r_ea .* v.Wa_theo .^ p.exp_ea;
 
+
 % energy gain, growth, egg production: G(t), W(t), R(t), E(t) ------------------
-v.G = zeros(size(v.D));
+v.G = zeros(NT,NC,NS);
 v.W = repmat(v.We_theo,[NT 1 1]);
-v.R = zeros(size(v.D));
-v.Einc = zeros(size(v.D));
-v.E = zeros(size(v.D));
+v.R = zeros(NT,NC,NS);
+v.Einc = zeros(NT,NC,NS);
+v.E = zeros(NT,NC,NS);
 astar = p.rb + (1-p.rb) .* v.a;
 
 for n=1:NT-1
@@ -147,7 +153,7 @@ for n=1:NT-1
 	fr = max(0,min(1,fr));
 	fr(energyLost) = 1; % all net losses come from R
     v.R(n+1,g) = v.R(n,g) + fr(g) .* GWdt(g);
-    v.R(n+1,e) = v.R(n,e) + energyLost(e) .* fr(e) .* GWdt(e);        
+    v.R(n+1,e) = v.R(n,e) + energyLost(e) .* fr(e) .* GWdt(e);   
     % income egg production
     v.Einc(n,:) = max(0,GWdt) .* e;
 	% capital egg production
@@ -163,7 +169,7 @@ end
 % adult size Wa, Ra (= size at the moment egg prod begins)
 last = ~isineggprod(1:end-1,:,:) & isineggprod(2:end,:,:);
 v.Wa = max(v.W(1:end-1,:,:) .* last);
-v.Ra = max(v.R(1:end-1,:,:) .* last); % the max() shouldn't be necessary
+v.Ra = max(v.R(1:end-1,:,:) .* last);
 % update the estimate of We
 v.We = p.r_ea .* v.Wa .^ p.exp_ea;
 % capital fraction of egg production
@@ -175,26 +181,46 @@ isalive = isalive & cumsum(isstarving)==0;
 isineggprod = isineggprod & isalive;
 v.E(~isalive) = 0;
 
+
 % mortality and survivorship: N(t) ---------------------------------------------
-v.m = p.m0 .* qg .* v.a .* v.W.^(p.theta-1); % mort. rate at T, size
-v.m(~isalive) = 0;
+v.m = zeros(NT,NC,NS);
+v.m(isalive) = p.m0 .* qg(isalive) .* v.a(isalive) .* v.W(isalive).^(p.theta-1);
+	% mort. rate at T, size
 v.lnN = cumsum(-v.m) .* dt;
 % calculate adult recruitment (= recruitment at the moment egg prod begins)
 lnNa = v.lnN;
 lnNa(~isineggprod) = nan;
 v.Na = exp(max(lnNa));
 
+
 % contributions to fitness at each t -------------------------------------------
 v.dF1 = real(v.E .* exp(v.lnN) .* dt) ./ v.We_theo;
 v.dF1(isnan(v.dF1)) = 0;
-v.tEcen = sum(v.t .* v.dF1) ./ sum(v.dF1); % center of mass of E*N
-	% this minus t0 is generation length
+v.F1 = sum(v.dF1);
+v.tEcen = sum(v.t .* v.dF1) ./ v.F1; % center of mass of E*N
+	% tEcen - t0 is generation length: similar to, but more accurate than,
+	% dtegg - t0
+	
+	
+% two-generation fitness -------------------------------------------------------
+F1expected = max(v.F1,[],3); % expected LEP for each t0, assuming that the 
+						     % offspring will take the optimal strategy
+F1ex_ = interp1(v.t0,F1expected,v.t(:,1)); % reinterpret this as expected LEP for offspring
+										   % produced on a given timestep
+F1ex_(isnan(F1ex_)) = 0;
+F1ex_ = repmat(F1ex_(:),[1 NC NS]);
+dF2 = v.dF1 .* F1ex_; % contribution to two-generation fitness at each (t,t0,s)
+v.F2 = sum(dF2); % two-generation fitness at each (t0,s)
+% could iterate like this: F2expected = max(v.F2,[],3); ...
 		    
+	
 % clean up ---------------------------------------------------------------------
-if strcmpi(whatToSave,'fitness only')
-	OUT = v.dF1;
-elseif strcmpi(whatToSave,'scalars only')
-	OUT = keepScalars(v);
+if strcmpi(whatToSave,'scalars only')
+	v = keepScalars(v);
+elseif strcmpi(whatToSave,'scalars and fitness')
+	dF1 = v.dF1;
+	v = keepScalars(v);
+	v.dF1 = dF1;
 else
 	v.a(~isalive) = nan;
 	v.D(~isalive) = nan;
@@ -202,5 +228,4 @@ else
 	v.R(~isalive) = nan;
 	v.lnN(~isalive) = -Inf;
 	v.E(~isalive) = 0;
-	OUT = v;
 end
