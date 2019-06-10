@@ -1,4 +1,4 @@
-function OUT = coltrane_integrate(forcing,p,t0,s,whatToSave);
+function OUT = coltrane_integrate(forcing,p,t0,s,whatToSave)
 
 %   v = coltrane_integrate(forcing,p,t0,s,'everything');
 %   								  ...,'scalars only');
@@ -55,11 +55,13 @@ end
 
 % development: D(t) ----------------------------------------------------
 isalive = v.t >= repmat(v.t0,[NT 1 1]); % spawned yet?
+isineggprod = v.t >= tegg_3d;
 if p.requireActiveSpawning
 	% eliminate (t0,s) combinations in which t0 falls during diapause
 	isalive = isalive & repmat(activeSpawning,[NT 1 1]); 
 	% likewise (t0,s) combinations in which t0+dtegg falls during diapause
-	isalive = isalive & repmat(activeSpawning2,[NT 1 1]); 
+	isalive = isalive & repmat(activeSpawning2,[NT 1 1]);
+    isineggprod = isineggprod & v.a;
 end
 dDdt = isalive .* p.u0 .* qd; % nonfeeding formula
 v.D = cumsum(dDdt) .* dt;
@@ -70,12 +72,12 @@ v.D = cumsum(dDdt) .* dt;
 v.D(v.D>1) = 1;
 isfeeding = v.D >= p.Df; % recalculated because cumsum() is one timestep
 						 % off from a true forward integration
-
+                         
 % the life history is divided into two phases, growth and egg production. 
 % This is equivalent to juvenile and adult if the animals delay their
 % final maturation until just before egg prod. begins, but not if they enter
 % C6 and then delay egg prod. (e.g. in the case of overwintering C6's)
-isineggprod = v.t >= tegg_3d;
+% isineggprod = v.t >= tegg_3d;
 isgrowing = v.D >= p.Df & ~isineggprod;
 
 % check D(t) for consistency with dtegg
@@ -111,6 +113,7 @@ isalive = isalive & ~isnan(v.D);
 isfeeding = isfeeding & isalive;
 isgrowing = isgrowing & isalive;
 isineggprod = isineggprod & isalive;
+fullydeveloped = v.D == 1; % distinct from isineggprod
 
 % pick a guess at adult size based on mean temperature in the forcing,
 % and pick a corresponding guess at egg size based on this.
@@ -129,8 +132,16 @@ v.Einc = zeros(size(v.D));
 v.E = zeros(size(v.D));
 astar = p.rb + (1-p.rb) .* v.a;
 
+% track maximum reserves to limit growth at C6
+if NS > 1 || NS == 0
+    maxReserves = zeros(NC,NS);
+else
+    maxReserves = zeros(1,NC);
+end
+
 for n=1:NT-1
-	f = isfeeding(n,:); g = isgrowing(n,:); e = isineggprod(n,:);
+	f = isfeeding(n,:); g = isgrowing(n,:);
+    d = fullydeveloped(n,:); e = isineggprod(n,:);
 	% net gain
 	Imax_nf = qg(n,f) .* p.I0 .* v.W(n,f).^(p.theta-1);
 	I_nf = v.a(n,f) .* p.r_assim .* v.sat(n,f) .* Imax_nf;
@@ -138,27 +149,32 @@ for n=1:NT-1
 	v.G(n,f) = I_nf - M_nf;
     GWdt = v.G(n,:) .* v.W(n,:) .* dt;
     energyLost = GWdt < 0;
-	% allocation to growth
+    gdGain = g & d & ~energyLost; % growth phase, D=1, energy gained
+    eGain = e & ~energyLost; % egg phase, energy gained
+    % allocation to growth
 	dW = GWdt;
-	dW(dW>0 & e) = 0;
-	v.W(n+1,:) = max(0, v.W(n,:) + dW);
+    dW(gdGain) = min(dW(gdGain), max(0, maxReserves(gdGain) - v.R(n,gdGain))); % restricted weight gain when fully developed in growth phase
+    dW(eGain) = 0; % egg phase energy gains do not increase weight    
+    v.W(n+1,:) = max(0, v.W(n,:) + dW);
 	% allocation to reserves
 	fr = (v.D(n,:) - p.Ds) ./ (1 - p.Ds);
 	fr = max(0,min(1,fr));
 	fr(energyLost) = 1; % all net losses come from R
-    v.R(n+1,g) = v.R(n,g) + fr(g) .* GWdt(g);
-    v.R(n+1,e) = v.R(n,e) + energyLost(e) .* fr(e) .* GWdt(e);        
+    v.R(n+1,:) = v.R(n,:) + fr .* dW;
+    gainR = squeeze(v.R(n+1,:,:)) > maxReserves;
+    maxReserves(gainR) = v.R(n+1,gainR);    
     % income egg production
     v.Einc(n,:) = max(0,GWdt) .* e;
 	% capital egg production
 	Emax = zeros(size(GWdt));
-	Emax(f) = p.r_assim .* Imax_nf .* e(f) .* v.W(n,f);
+	Emax(f) = p.r_assim .* Imax_nf .* e(f) .* v.W(n+1,f) .* dt;
     Ecap = max(0, Emax - v.Einc(n,:));
-    dE = min(max(0,v.R(n,:)), Ecap.*dt);
+    dE = min(max(0,v.R(n+1,:)), Ecap);
     v.E(n,:) = v.Einc(n,:) + dE;
 	v.W(n+1,:) = v.W(n+1,:) - dE;
 	v.R(n+1,:) = v.R(n+1,:) - dE;
 end
+
 
 % adult size Wa, Ra (= size at the moment egg prod begins)
 last = ~isineggprod(1:end-1,:,:) & isineggprod(2:end,:,:);
@@ -173,7 +189,7 @@ v.capfrac = sum(v.E - v.Einc) ./ sum(v.E);
 isstarving = v.R < -p.rstarv .* v.W;
 isalive = isalive & cumsum(isstarving)==0;
 isineggprod = isineggprod & isalive;
-v.E(~isalive) = 0;
+v.E(~isineggprod) = 0;
 
 % mortality and survivorship: N(t) ---------------------------------------------
 v.m = p.m0 .* qg .* v.a .* v.W.^(p.theta-1); % mort. rate at T, size
@@ -185,11 +201,19 @@ lnNa(~isineggprod) = nan;
 v.Na = exp(max(lnNa));
 
 % contributions to fitness at each t -------------------------------------------
-v.dF1 = real(v.E .* exp(v.lnN) .* dt) ./ v.We_theo;
+% v.dF1 = real(v.E .* exp(v.lnN) .* dt) ./ v.We_theo;
+v.dF1 = (v.E .* exp(v.lnN)) ./ v.We_theo;
 v.dF1(isnan(v.dF1)) = 0;
 v.tEcen = sum(v.t .* v.dF1) ./ sum(v.dF1); % center of mass of E*N
 	% this minus t0 is generation length
-		    
+    
+% days between reaching maximum possible size and
+% t0+dtegg, when energy gains are wasted as they cant go to reserve gorowth
+% or income egg production.
+% maxSize = v.R ./ v.W >= p.maxRelReserves;
+% v.noGrowthDaysPreDia = sum(maxSize & cumsum(~isactive) == 0);
+% v.noGrowthDaysPostDia = sum(maxSize & cumsum(isactive) == 2);
+
 % clean up ---------------------------------------------------------------------
 if strcmpi(whatToSave,'fitness only')
 	OUT = v.dF1;
