@@ -167,12 +167,12 @@ for n=1:NT-1
     v.Einc(n,:) = max(0,GWdt) .* e;
 	% capital egg production
 	Emax = zeros(size(GWdt));
-	Emax(f) = p.r_assim .* Imax_nf .* e(f) .* v.W(n+1,f) .* dt;
+	Emax(f) = p.r_assim .* Imax_nf .* e(f) .* v.W(n+1,f);
     Ecap = max(0, Emax - v.Einc(n,:));
-    dE = min(max(0,v.R(n+1,:)), Ecap);
-    v.E(n,:) = v.Einc(n,:) + dE;
-	v.W(n+1,:) = v.W(n+1,:) - dE;
-	v.R(n+1,:) = v.R(n+1,:) - dE;
+    dR = min(max(0,v.R(n+1,:)), Ecap.*dt);
+    v.E(n,:) = v.Einc(n,:) + dR./dt;
+	v.W(n+1,:) = v.W(n+1,:) - dR;
+	v.R(n+1,:) = v.R(n+1,:) - dR;
 end
 
 
@@ -202,7 +202,7 @@ v.Na = exp(max(lnNa));
 
 % contributions to fitness at each t -------------------------------------------
 % v.dF1 = real(v.E .* exp(v.lnN) .* dt) ./ v.We_theo;
-v.dF1 = (v.E .* exp(v.lnN)) ./ v.We_theo;
+v.dF1 = (v.E .* exp(v.lnN)) ./ v.We_theo .* dt;
 v.dF1(isnan(v.dF1)) = 0;
 v.tEcen = sum(v.t .* v.dF1) ./ sum(v.dF1); % center of mass of E*N
 	% this minus t0 is generation length
