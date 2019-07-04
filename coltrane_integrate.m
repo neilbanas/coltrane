@@ -5,8 +5,10 @@ function v = coltrane_integrate(forcing,p,t0,s,whatToSave);
 %   								...,'scalars and fitness');
 %
 % calculates a(t), D(t), W(t), N(t), E(t), and dF1 for a set of spawning dates
-% t0 and a set of strategies s. The fields of s should be tdia_exit, tdia_enter,
-% and dtegg.
+% t0 and a set of strategies s.
+% 
+% The fields of s should be tdia_exit, tdia_enter, and dtegg. They can be any
+% shape; they will be rearranged into a flat list.
 
 
 if nargin < 5, whatToSave = 'everything'; end
@@ -143,27 +145,27 @@ for n=1:NT-1
 	M_nf = p.rm .* astar(n,f) .* Imax_nf;
 	v.G(n,f) = I_nf - M_nf;
     GWdt = v.G(n,:) .* v.W(n,:) .* dt;
-    energyLost = GWdt < 0;
 	% allocation to growth
 	dW = GWdt;
 	dW(dW>0 & e) = 0;
+		% consider also setting dW(D==1) = 0. This might accomplish what
+		% Aidan's maxReserves mechanism was meant to do
 	v.W(n+1,:) = max(0, v.W(n,:) + dW);
 	% allocation to reserves
 	fr = (v.D(n,:) - p.Ds) ./ (1 - p.Ds);
 	fr = max(0,min(1,fr));
-	fr(energyLost) = 1; % all net losses come from R
-    v.R(n+1,g) = v.R(n,g) + fr(g) .* GWdt(g);
-    v.R(n+1,e) = v.R(n,e) + energyLost(e) .* fr(e) .* GWdt(e);   
+	fr(GWdt < 0) = 1; % all net losses come from R
+    v.R(n+1,:) = v.R(n,:) + fr .* dW;
     % income egg production
     v.Einc(n,:) = max(0,GWdt) .* e;
 	% capital egg production
 	Emax = zeros(size(GWdt));
 	Emax(f) = p.r_assim .* Imax_nf .* e(f) .* v.W(n,f);
     Ecap = max(0, Emax - v.Einc(n,:));
-    dE = min(max(0,v.R(n,:)), Ecap.*dt);
-    v.E(n,:) = v.Einc(n,:) + dE;
-	v.W(n+1,:) = v.W(n+1,:) - dE;
-	v.R(n+1,:) = v.R(n+1,:) - dE;
+    dR = min(max(0,v.R(n+1,:)), Ecap.*dt);
+    v.E(n,:) = v.Einc(n,:) + dR./dt;
+	v.W(n+1,:) = v.W(n+1,:) - dR;
+	v.R(n+1,:) = v.R(n+1,:) - dR;
 end
 
 % adult size Wa, Ra (= size at the moment egg prod begins)
@@ -205,8 +207,8 @@ v.tEcen = sum(v.t .* v.dF1) ./ v.F1; % center of mass of E*N
 % two-generation fitness -------------------------------------------------------
 F1expected = max(v.F1,[],3); % expected LEP for each t0, assuming that the 
 						     % offspring will take the optimal strategy
-F1ex_ = interp1(v.t0,F1expected,v.t(:,1)); % reinterpret this as expected LEP for offspring
-										   % produced on a given timestep
+F1ex_ = interp1(v.t0,F1expected,v.t(:,1)); % expected LEP for offspring produced
+										   % on a given timestep
 F1ex_(isnan(F1ex_)) = 0;
 F1ex_ = repmat(F1ex_(:),[1 NC NS]);
 dF2 = v.dF1 .* F1ex_; % contribution to two-generation fitness at each (t,t0,s)
