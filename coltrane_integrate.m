@@ -103,11 +103,12 @@ end
 first31dec = repmat(reshape(datenum(yr0,12,31), [1 NC NS]), [NT 1 1]);
 is31dec = abs(v.t-first31dec) == ...
 			  repmat(min(abs(v.t-first31dec)),[NT 1 1]);
+is31dec = is31dec & cumsum(is31dec)==1;
 v.D_winter = reshape(v.D(is31dec),[1 NC NS]);
 
 % flag time points at which the animal is in diapause but at a 
 % diapause-incapable stage, and mark these cases as dead
-isactive = isalive & v.a==1;
+isactive = isalive & (v.a==1 | ~isfeeding);
 hasbeenactive = (cumsum(isactive) >= 1);
 isfailingtodiapause = isalive & hasbeenactive & v.a==0 & v.D < p.Ddia;
 hasfailedtodiapause = (cumsum(isfailingtodiapause)>1);
@@ -147,9 +148,11 @@ for n=1:NT-1
     GWdt = v.G(n,:) .* v.W(n,:) .* dt;
 	% allocation to growth
 	dW = GWdt;
-	dW(dW>0 & e) = 0;
-		% consider also setting dW(D==1) = 0. This might accomplish what
-		% Aidan's maxReserves mechanism was meant to do
+	dW(dW>0 & e) = 0; % definitely
+	dW(dW>0 & v.D(n,:)==1) = 0; % maybe
+		% this is meant to accomplish what Aidan's maxReserves mechanism did.
+		% note that positive gain is simply lost between D=1 and the start of egg prod,
+		% as if the animals are wishing they were in diapause
 	v.W(n+1,:) = max(0, v.W(n,:) + dW);
 	% allocation to reserves
 	fr = (v.D(n,:) - p.Ds) ./ (1 - p.Ds);
@@ -157,7 +160,7 @@ for n=1:NT-1
 	fr(GWdt < 0) = 1; % all net losses come from R
     v.R(n+1,:) = v.R(n,:) + fr .* dW;
     % income egg production
-    v.Einc(n,:) = max(0,GWdt) .* e;
+    v.Einc(n,:) = max(0,GWdt)./dt .* e;
 	% capital egg production
 	Emax = zeros(size(GWdt));
 	Emax(f) = p.r_assim .* Imax_nf .* e(f) .* v.W(n,f);
@@ -214,6 +217,8 @@ F1ex_ = repmat(F1ex_(:),[1 NC NS]);
 dF2 = v.dF1 .* F1ex_; % contribution to two-generation fitness at each (t,t0,s)
 v.F2 = sum(dF2); % two-generation fitness at each (t0,s)
 % could iterate like this: F2expected = max(v.F2,[],3); ...
+% note that (n-generation fitness)^(1/n) is the per-generation fitness, and
+% (n-generation fitness)^(365/n/(tEcen-t0)) - 1 is the per-year growth rate
 		    
 	
 % clean up ---------------------------------------------------------------------

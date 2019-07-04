@@ -8,13 +8,13 @@ t0 = forcing.t(1) : p.dt_spawn : (forcing.t(end) - 365);
 
 % yearday of diapause exit
 tdia_exit = p.tdia_exit;
-if isempty(tdia_exit)
+if isempty(tdia_exit) || strcmpi(tdia_exit,'default')
 	tdia_exit = 0 : p.dt_dia : 365/2;
 end
 
 % yearday of diapause entry
 tdia_enter = p.tdia_enter;
-if isempty(tdia_enter)
+if isempty(tdia_enter) || strcmpi(tdia_enter,'default')
 	tdia_enter = (max(tdia_exit) + p.dt_dia) : p.dt_dia : 365;
 end
 
@@ -24,7 +24,7 @@ if isempty(dtegg)
 	dteggmin = (p.min_genlength_years - 0.5) .* 365;
 	dteggmin = max(dteggmin, p.dt_spawn);
 	dteggmax = (p.max_genlength_years + 0.5) .* 365;
-	dteggmax = min(dteggmax, forcing.t(end) - t0(end));
+	dteggmax = min(dteggmax, forcing.t(end));
 	dtegg = dteggmin : p.dt_spawn : dteggmax;
 end
 
