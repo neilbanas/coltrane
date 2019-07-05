@@ -164,7 +164,7 @@ for n=1:NT-1
     gainR = squeeze(v.R(n+1,:,:)) > maxReserves;
     maxReserves(gainR) = v.R(n+1,gainR);    
     % income egg production
-    v.Einc(n,:) = max(0,GWdt) .* e;
+    v.Einc(n,:) = max(0,GWdt)./dt .* e;
 	% capital egg production
 	Emax = zeros(size(GWdt));
 	Emax(f) = p.r_assim .* Imax_nf .* e(f) .* v.W(n+1,f);
