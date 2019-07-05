@@ -83,7 +83,6 @@ isfeeding = v.D >= p.Df; % recalculated because cumsum() is one timestep
 % final maturation until just before egg prod. begins, but not if they enter
 % C6 and then delay egg prod. (e.g. in the case of overwintering C6's)
 isineggprod = v.t >= tegg_3d;
-isgrowing = v.D >= p.Df & ~isineggprod;
 
 % check D(t) for consistency with dtegg
 toolate = any(v.D<1 & isineggprod);
@@ -116,7 +115,6 @@ v.D(hasfailedtodiapause) = nan;
 
 isalive = isalive & ~isnan(v.D);
 isfeeding = isfeeding & isalive;
-isgrowing = isgrowing & isalive;
 isineggprod = isineggprod & isalive;
 
 
@@ -139,7 +137,7 @@ v.E = zeros(NT,NC,NS);
 astar = p.rb + (1-p.rb) .* v.a;
 
 for n=1:NT-1
-	f = isfeeding(n,:); g = isgrowing(n,:); e = isineggprod(n,:);
+	f = isfeeding(n,:); e = isineggprod(n,:);
 	% net gain
 	Imax_nf = qg(n,f) .* p.I0 .* v.W(n,f).^(p.theta-1);
 	I_nf = v.a(n,f) .* p.r_assim .* v.sat(n,f) .* Imax_nf;
@@ -149,10 +147,10 @@ for n=1:NT-1
 	% allocation to growth
 	dW = GWdt;
 	dW(dW>0 & e) = 0; % definitely
-	dW(dW>0 & v.D(n,:)==1) = 0; % maybe
+%	dW(dW>0 & v.D(n,:)==1) = 0; % maybe
 		% this is meant to accomplish what Aidan's maxReserves mechanism did.
 		% note that positive gain is simply lost between D=1 and the start of egg prod,
-		% as if the animals are wishing they were in diapause
+		% as if the animals are wishing they were in diapause. It might be too strict.	
 	v.W(n+1,:) = max(0, v.W(n,:) + dW);
 	% allocation to reserves
 	fr = (v.D(n,:) - p.Ds) ./ (1 - p.Ds);
