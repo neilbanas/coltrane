@@ -21,7 +21,7 @@ p=setDefault(p,'dt_dia',20);
 p=setDefault(p,'dtegg',[]);
 	% if this is empty, constructs a set using min_ and max_genlength_years
 p=setDefault(p,'min_genlength_years',0);
-p=setDefault(p,'max_genlength_years',2);
+p=setDefault(p,'max_genlength_years',Inf);
 	% range of generation lengths to evaluate (in integer years)
 
 
