@@ -62,11 +62,11 @@ end
 for i = 1:NS
 	v.F1(:,i) = out{i}.F1(:); % now [NC NS], not [1 NC NS]
 	v.F2(:,i) = out{i}.F2(:);
+	v.level(:,i) = out{i}.level(:);
 end
-f = find(any(v.F1>0)); % strategies with any viable cohorts
+f = find(any(v.level>0)); % strategies with any complete integrations
 if isempty(f)
-	v = out; % if there aren't any viable solutions, return raw output instead
-			 % of a reorganised structure
+	% if there aren't any, return only level (and F1, F2 = 0)
 	return;
 end
 fields = setdiff(fieldnames(out{f(1)}),{'F1','F2'});

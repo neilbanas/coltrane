@@ -33,6 +33,12 @@ tegg_3d = repmat(tegg,[NT 1 1]);
 
 v.F1 = zeros(1,NC,NS);
 v.F2 = zeros(1,NC,NS);
+v.level = zeros(1,NC,NS);
+	% level 0 = logical inconsistency (between development and dtegg)
+ 	% level 1 = successful diapause
+ 	% level 2 = reaches adulthood
+ 	% and past there, fitness provides classifications
+ 	
 
 % activity: a(t) ------------------------------------------------------
 v.a = double(~(v.yday >= repmat(v.tdia_enter,[NT 1 1]) | ...
@@ -107,11 +113,17 @@ hasbeenactive = (cumsum(isactive) >= 1);
 isfailingtodiapause = isalive & hasbeenactive & v.a==0 & v.D < p.Ddia;
 hasfailedtodiapause = (cumsum(isfailingtodiapause)>1);
 v.D(hasfailedtodiapause) = nan;
+v.level(~any(hasfailedtodiapause)) = 1; % level 1 = successful diapause
 
 isalive = isalive & ~isnan(v.D);
 isfeeding = isfeeding & isalive;
 isineggprod = isineggprod & isalive;
 
+% date on which D=1 is reached (another diagnostic)
+tD1 = v.t;
+tD1(v.D<1 | ~isfinite(v.D)) = nan;
+v.tD1 = min(tD1);
+v.level(any(v.D==1)) = 2; % level 2 = reaches adulthood
 
 % pick a guess at adult size based on mean temperature in the forcing,
 % and pick a corresponding guess at egg size based on this.
@@ -200,7 +212,7 @@ v.F1 = sum(v.dF1);
 v.tEcen = sum(v.t .* v.dF1) ./ v.F1; % center of mass of E*N
 	% tEcen - t0 is generation length: similar to, but more accurate than,
 	% dtegg - t0
-	
+
 	
 % two-generation fitness -------------------------------------------------------
 F1expected = max(v.F1,[],3); % expected LEP for each t0, assuming that the 
