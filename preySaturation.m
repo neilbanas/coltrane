@@ -10,8 +10,10 @@ function v = preySaturation(v0,p);
 
 v = v0;
 
-if strcmpi(p.preySatVersion,'biomas_dia18')
-	v.Ptot = v.flagel + v.diatom;
+if strcmpi(p.preySatVersion,'biomas_dia19')
+	if ~isfield(v,'Ptot')
+		v.Ptot = v.flagel + v.diatom;
+	end
 	% BIOMAS contains two phytoplankton classes. For now just add them
 	% together (and ignore the third class of pelagic prey, microzooplankton)
 
@@ -20,10 +22,18 @@ if strcmpi(p.preySatVersion,'biomas_dia18')
 
 	% prey saturation considering (a guess at) ice algae only.
 	% days that ice cover is > 15%, after yearday _tIA_ and before yearday
-	% (365-tIA), all weighted by a highly uncertain weighting factor iceToSat
+	% 200, for a maximum of _dtIA_ days, all weighted by a highly uncertain weighting
+	% factor iceToSat
 	v.satIA = (v.ice > 0.15) ...
-		  .* (v.yday > p.tIA & v.yday < (365-p.tIA)) ...
+		  .* (v.yday > p.tIA & v.yday < 200) ...
 		  .* p.iceToSat;
+	yr = ceil((v.t(:,1)-v.t(1))./365);
+	for n=1:max(yr)
+		satn = zeros(size(v.satIA));
+		satn(yr==n) = v.satIA(yr==n);
+		satn(cumsum(double(satn)) > p.dtIA/(v.t(2)-v.t(1))) = 0;
+		v.satIA(yr==n) = satn(yr==n);
+	end
 		  
 	v.sat = max(v.satWC, v.satIA); % overall prey saturation
 	
