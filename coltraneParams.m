@@ -54,6 +54,8 @@ p=setDefault(p,'Ddia',0.6); % minimum diapause-capable stage (0.6 = start of C4;
 p=setDefault(p,'requireActiveSpawning',0);
 	% omit cases in which t0 falls during the diapause period, and set E=0
 	% during diapause as well
+p=setDefault(p,'allowGainAfterD1',1);
+	% is it allowed to put on mass after D=1 but before dtegg is reached?
 p=setDefault(p,'r_assim',0.67); % assimilation efficiency of ingestion
 p=setDefault(p,'rm',0.8 * 0.17);
 	% active metabolism as fraction of max assimilation

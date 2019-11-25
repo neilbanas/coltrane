@@ -86,15 +86,10 @@ isineggprod = v.t >= tegg_3d;
 
 % check D(t) for consistency with dtegg
 toolate = any(v.D<1 & isineggprod);
+v.D(:,toolate) = nan;
 if all(toolate)
-	v.D = [];
 	return
-	% if there are no good solutions at all, don't bother with the rest of the
-	% model. isempty(v.D) is the test of whether the model completed
-else
-	v.D(:,toolate) = nan;
-	% if there's an inconsistency for some (t0,tdia_enter,tdia_exit) and not
-	% others, blank out the bad ones 
+	% if there are no good solutions at all, don't bother with the rest of the model
 end
 
 % calculate D in middle of first winter, just as a diagnostic
@@ -147,10 +142,12 @@ for n=1:NT-1
 	% allocation to growth
 	dW = GWdt;
 	dW(dW>0 & e) = 0; % definitely
-%	dW(dW>0 & v.D(n,:)==1) = 0; % maybe
+	if ~p.allowGainAfterD1
+		dW(dW>0 & v.D(n,:)==1) = 0;
 		% this is meant to accomplish what Aidan's maxReserves mechanism did.
 		% note that positive gain is simply lost between D=1 and the start of egg prod,
-		% as if the animals are wishing they were in diapause. It might be too strict.	
+		% as if the animals are wishing they were in diapause. It might be too strict.
+	end
 	v.W(n+1,:) = max(0, v.W(n,:) + dW);
 	% allocation to reserves
 	fr = (v.D(n,:) - p.Ds) ./ (1 - p.Ds);
