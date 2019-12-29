@@ -224,9 +224,31 @@ F1ex_ = repmat(F1ex_(:),[1 NC NS]);
 dF2 = v.dF1 .* F1ex_; % contribution to two-generation fitness at each (t,t0,s)
 v.F2 = sum(dF2); % two-generation fitness at each (t0,s)
 % could iterate like this: F2expected = max(v.F2,[],3); ...
+% 
 % note that (n-generation fitness)^(1/n) is the per-generation fitness, and
 % (n-generation fitness)^(365/n/(tEcen-t0)) - 1 is the per-year growth rate
+% (but Hunter et al. 2020 might have some new ideas about this)
 		    
+		    
+% scalar metrics from forcing
+fields = {'Ptot','T0','Td','sat','ice','satIA','satWC'};
+a0 = v.a;
+a0(~isfinite(a0)) = 0;
+for k = 1:length(fields)
+	if isfield(v,fields{k})
+		f0 = v.(fields{k});
+		f0(~isfinite(f0)) = 0;
+		if size(f0,2)==1, f0 = repmat(f0,[1 NC 1]); end
+		if size(f0,3)==1, f0 = repmat(f0,[1 1 NS]); end
+%		v.([fields{k} '_avg']) = sum(f0.*ones(size(a0))) ./ sum(ones(size(a0)));
+			% this is a silly way to take a mean but have been getting weird dim errors
+		v.([fields{k} '_avg']) = nanmean(f0);
+		v.([fields{k} '_active']) = sum(f0.*a0) ./ sum(a0);
+		isgrowing = isalive & ~isineggprod;
+		v.([fields{k} '_growing']) = sum(f0.*isgrowing) ./ sum(isgrowing); 
+	end
+end	    
+	
 	
 % clean up ---------------------------------------------------------------------
 if strcmpi(whatToSave,'scalars only')
