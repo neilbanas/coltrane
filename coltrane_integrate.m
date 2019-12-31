@@ -32,7 +32,6 @@ tegg = v.t0 + v.dtegg; % date that egg production starts, [1 NC NS]
 tegg_3d = repmat(tegg,[NT 1 1]);
 
 v.F1 = zeros(1,NC,NS);
-v.F2 = zeros(1,NC,NS);
 v.level = zeros(1,NC,NS);
 	% level 0 = logical inconsistency (between development and dtegg)
  	% level 1 = successful diapause
@@ -212,22 +211,6 @@ v.F1 = sum(v.dF1);
 v.tEcen = sum(v.t .* v.dF1) ./ v.F1; % center of mass of E*N
 	% tEcen - t0 is generation length: similar to, but more accurate than,
 	% dtegg - t0
-
-	
-% two-generation fitness -------------------------------------------------------
-F1expected = max(v.F1,[],3); % expected LEP for each t0, assuming that the 
-						     % offspring will take the optimal strategy
-F1ex_ = interp1(v.t0,F1expected,v.t(:,1)); % expected LEP for offspring produced
-										   % on a given timestep
-F1ex_(isnan(F1ex_)) = 0;
-F1ex_ = repmat(F1ex_(:),[1 NC NS]);
-dF2 = v.dF1 .* F1ex_; % contribution to two-generation fitness at each (t,t0,s)
-v.F2 = sum(dF2); % two-generation fitness at each (t0,s)
-% could iterate like this: F2expected = max(v.F2,[],3); ...
-% 
-% note that (n-generation fitness)^(1/n) is the per-generation fitness, and
-% (n-generation fitness)^(365/n/(tEcen-t0)) - 1 is the per-year growth rate
-% (but Hunter et al. 2020 might have some new ideas about this)
 		    
 		    
 % scalar metrics from forcing
@@ -240,8 +223,6 @@ for k = 1:length(fields)
 		f0(~isfinite(f0)) = 0;
 		if size(f0,2)==1, f0 = repmat(f0,[1 NC 1]); end
 		if size(f0,3)==1, f0 = repmat(f0,[1 1 NS]); end
-%		v.([fields{k} '_avg']) = sum(f0.*ones(size(a0))) ./ sum(ones(size(a0)));
-			% this is a silly way to take a mean but have been getting weird dim errors
 		v.([fields{k} '_avg']) = nanmean(f0);
 		v.([fields{k} '_active']) = sum(f0.*a0) ./ sum(a0);
 		isgrowing = isalive & ~isineggprod;
@@ -255,8 +236,10 @@ if strcmpi(whatToSave,'scalars only')
 	v = keepScalars(v);
 elseif strcmpi(whatToSave,'scalars and fitness')
 	dF1 = v.dF1;
+	t = v.t;
 	v = keepScalars(v);
 	v.dF1 = dF1;
+	v.t = t;
 else
 	v.a(~isalive) = nan;
 	v.D(~isalive) = nan;

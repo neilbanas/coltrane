@@ -60,8 +60,6 @@ end
 % rearrange into something more useful. (_parfor_ prefers that we don't do all this
 % fancy indexing inside the main loop over strategies 1:NS.)
 for i = 1:NS
-	v.F1(:,i) = out{i}.F1(:); % now [NC NS], not [1 NC NS]
-	v.F2(:,i) = out{i}.F2(:);
 	v.level(:,i) = out{i}.level(:);
 end
 f = find(any(v.level>0)); % strategies with any complete integrations
@@ -69,15 +67,38 @@ if isempty(f)
 	% if there aren't any, return only level (and F1, F2 = 0)
 	return;
 end
-fields = setdiff(fieldnames(out{f(1)}),{'F1','F2'});
+fields = fieldnames(out{f(1)});
 for k = 1:length(fields)
 	v.(fields{k}) = repmat(nan,size(out{f(1)}.(fields{k})));
 	for i=1:NS
-		if isfield(out{i},fields{k}) && ~isempty(out{i}.(fields{k})) ...
-			v.(fields{k})(:,:,i) = squeeze(out{i}.(fields{k}));
+		if isfield(out{i},fields{k}) && ~isempty(out{i}.(fields{k}))
+			v.(fields{k})(:,:,i) = (out{i}.(fields{k}));
 		end
 	end
 end
 
 
+% two-generation fitness
+if isfield(v,'dF1')
+	F1expected = max(v.F1,[],3); % expected LEP for each t0, assuming that the 
+								 % offspring will take the optimal strategy
+	F1ex_ = interp1(v.t0(:,:,1),F1expected,v.t(:,1));
+		% expected LEP for offspring produced on a given timestep
+	F1ex_(isnan(F1ex_)) = 0;
+	F1ex_ = repmat(F1ex_(:),[1 NC NS]);
+	dF2 = v.dF1 .* F1ex_; % contribution to two-generation fitness at each (t,t0,s)
+	v.F2 = sum(dF2); % two-generation fitness at each (t0,s)
+	% could iterate like this: F2expected = max(v.F2,[],3); ...
+	% 
+	% note that (n-generation fitness)^(1/n) is the per-generation fitness, and
+	% (n-generation fitness)^(365/n/(tEcen-t0)) - 1 is the per-year growth rate
+	% (but Hunter et al. 2020 might have some new ideas about this)
+	v.F1 = squeeze(v.F1);
+	v.F2 = squeeze(v.F2);
+end
+
+
+for k = 1:length(fields)
+	v.(fields{k}) = squeeze(v.(fields{k}));
+end
 
