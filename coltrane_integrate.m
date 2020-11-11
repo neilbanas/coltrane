@@ -185,6 +185,27 @@ v.Ra = max(v.R(1:end-1,:,:) .* last);
 v.We = p.r_ea .* v.Wa .^ p.exp_ea;
 % capital fraction of egg production
 v.capfrac = sum(v.E - v.Einc) ./ sum(v.E);
+% W, R at all stages
+stages = {'N6','C1','C2','C3','C4','C5','C6'};
+for i=2:length(stages)-1
+	Dstart_i = 0.5 .* (stage2D(stages{i-1}) + stage2D(stages{i}));
+	Dend_i = 0.5 .* (stage2D(stages{i}) + stage2D(stages{i+1}));
+	atstage_i = double(v.D >= Dstart_i & v.D < Dend_i & isalive);
+	atstage_i(atstage_i==0) = nan;
+	v.(['W_' stages{i}]) = nanmean(v.W .* atstage_i);
+	v.(['R_' stages{i}]) = nanmean(v.R .* atstage_i);
+end
+% W, R for winter late stages
+% (that this is not a general definition of winter, but calculating it here avoids the
+% need to save full time-series output)
+D_C5_start = 0.5.*(stage2D('C4') + stage2D('C5'));
+iswin = v.yday >= datenum('Nov 1 0000') | v.yday <= datenum('Feb 28 0000');
+iswin = repmat(iswin(:),[1 NC NS]);
+iswinlatestage = double(v.D >= D_C5_start & isalive & iswin);
+iswinlatestage(iswinlatestage==0)=nan;
+v.W_C56win = nanmean(v.W.*iswinlatestage);
+v.R_C56win = nanmean(v.R.*iswinlatestage);
+
 
 % check for starvation
 isstarving = v.R < -p.rstarv .* v.W;
@@ -213,7 +234,7 @@ v.tEcen = sum(v.t .* v.dF1) ./ v.F1; % center of mass of E*N
 	% dtegg - t0
 		    
 		    
-% scalar metrics from forcing
+% scalar metrics from forcing --------------------------------------------------
 fields = {'Ptot','T0','Td','sat','ice','satIA','satWC'};
 a0 = v.a;
 a0(~isfinite(a0)) = 0;
