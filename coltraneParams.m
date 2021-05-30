@@ -25,12 +25,9 @@ p=setDefault(p,'max_genlength_years',Inf);
 	% range of generation lengths to evaluate (in integer years)
 
 
-p=setDefault(p,'preySatVersion','');
-p=setDefault(p,'tIA',45);
-	% yearday after which it's assumed that ice contains ice algae.
-	% see preySaturation.m for the values of preySatVersion in which it's used
+p=setDefault(p,'preySatVersion','biomas_dia21');
+p=setDefault(p,'KsIA',0.2);
 p=setDefault(p,'iceToSat',1);
-	% prey saturation in the presence of ice after yearday tIA
 
 
 p=setDefault(p,'r_ea',0.013); % egg:adult weight ratio if exp_ea=1
@@ -40,11 +37,14 @@ p=setDefault(p,'exp_ea',0.62); % egg weight = r_ea * adult weight^exp_ea
 	% broadcast spawners: r_ea = 0.013, exp_ea = 0.62
 p=setDefault(p,'theta',0.7); % metabolic scaling exponent
 p=setDefault(p,'u0',0.008); % food-saturated development rate at T = 0 
-p=setDefault(p,'I0',0.4); % food-saturated ingestion rate at S=1 µgC, T=0
+p=setDefault(p,'I0',0.37); % food-saturated ingestion rate at S=1 µgC, T=0
+	% This was 0.4 in Banas et al. 2016 and Hobbs et al. 2020,
+	% but tuning in June 2021 showed that lower I0 was better for the Wa-u0 relationship
 p=setDefault(p,'GGE_nominal',0.33); % for relating adult size to I0 and u0.
 p=setDefault(p,'Q10g',2.5); % Q10 for growth and ingestion
 p=setDefault(p,'Q10d',3); % Q10 for development
-p=setDefault(p,'Ks',1); % prey half-saturation; same units as P
+p=setDefault(p,'Ks',1.2); % prey half-saturation; same units as P
+	% from tuning, June 2021
 p=setDefault(p,'Df',0.10); % age of first feeding (0.10 = start of N3)
 p=setDefault(p,'Ds',0.35); % age at which to start storing lipids
 						   % (0.35 = start of C1)
@@ -68,7 +68,7 @@ p=setDefault(p,'rstarv',0.1); % starvation tolerance
 p=setDefault(p,'m0_over_GGE_I0',0.67);
 p=setDefault(p,'m0',p.m0_over_GGE_I0 * p.GGE_nominal * p.I0);
 p.m0_over_GGE_I0 = p.m0./p.GGE_nominal./p.I0;
-
+% this is probably overcomplicated at this point. Tuning June 2021 says m0 = 0.065
 
 
 % ------------------------------------------------------------------------------
