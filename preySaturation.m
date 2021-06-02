@@ -37,10 +37,36 @@ if strcmpi(p.preySatVersion,'biomas_dia21')
 	% iceToSat multiplying this expression but tuning suggested that 1 is about right--
 	% whereas KsIA << 1
 	v.satIA = IAind ./ (p.KsIA + IAind);
-	
+		
 	v.sat = max(v.satWC, v.satIA); % overall prey saturation
 	
 	
+
+elseif strcmpi(p.preySatVersion,'biomas_dia19a')
+	% same as biomas_dia19 below, but tIA is a function of latitude chosen so that
+	% the time point 1/3 of the way through the dtIA interval aligns with the
+	% bloom max a function of latitude from Castellani et al. 2017
+	%
+	% so dtIA and iceToSat are the free parameters
+	
+	if ~isfield(v,'Ptot')
+		v.Ptot = v.flagel + v.diatom;
+	end
+	v.satWC = v.Ptot ./ (p.Ks + v.Ptot);
+
+	tIA = max(45, 2.08 .* v.y - 30) - p.dtIA/3; % the new bit
+	v.satIA = (v.ice > 0.15) ...
+		  .* (v.yday > tIA & v.yday < 200) ...
+		  .* p.iceToSat;
+	yr = ceil((v.t(:,1)-v.t(1))./365);
+	for n=1:max(yr)
+		satn = zeros(size(v.satIA));
+		satn(yr==n) = v.satIA(yr==n);
+		satn(cumsum(double(satn)) > p.dtIA/(v.t(2)-v.t(1))) = 0;
+		v.satIA(yr==n) = satn(yr==n);
+	end  
+	v.sat = max(v.satWC, v.satIA); % overall prey saturation
+
 
 elseif strcmpi(p.preySatVersion,'biomas_dia19')
 	if ~isfield(v,'Ptot')
