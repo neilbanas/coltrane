@@ -4,11 +4,21 @@ function v = coltrane_integrate(forcing,p,t0,s,whatToSave);
 %   							    ...,'scalars only');
 %   								...,'scalars and fitness');
 %
-% calculates a(t), D(t), W(t), N(t), E(t), and dF1 for a set of spawning dates
-% t0 and a set of strategies s.
+% calculates a(t), D(t), W(t), R(t), N(t), E(t), and dF1 for a set of spawning
+% dates t0 and a set of strategies s.
 % 
 % The fields of s should be tdia_exit, tdia_enter, and dtegg. They can be any
 % shape; they will be rearranged into a flat list.
+%
+% note that in practice, we are running this with a single strategy case, breaking
+% up the strategy vector across the parfor loop in coltraneModel, which seems to be
+% the optimal place to parallelise.
+%
+% --------- to do:
+% test whether running one s case at a time gives ok performance when not paralleising;
+% if so, the whole s dimension could be removed from coltrane_integrate. Could rename
+% _integrate, Model, Ensemble to something clearer, or fold a u0 range right into 
+% coltraneModel so that it = a community.
 
 
 if nargin < 5, whatToSave = 'everything'; end

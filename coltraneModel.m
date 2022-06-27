@@ -13,14 +13,14 @@ function v = coltraneModel(forcing,p,whatToSave);
 %
 % relationship with the published Coltrane model (Front. Mar. Res. 2016):
 % * the phi model is hereby abandoned
-% * R,S are collapsed into a single state variable W = S + R. Allometric
-%		formulas using S in the paper now use W.
+% * R,S have been replaced by R and W = S + R. Allometric formulas using S
+%   in the paper now use W.
 % * the state variables have been largely separated so that not all parts
 % 		require iteration in time. This makes the model cleanly 
 % 		hierarchical, so that one can derive predictions about
 %				1) development alone (D),
-% 				2) then size and time evolution in surviving cohorts (D,W),
-% 				3) then mortality, survivorship, and population dynamics (D,W,N,E).
+% 				2) then size and time evolution in surviving cohorts (D,W,R),
+% 				3) then mortality, survivorship, and population dynamics (D,W,R,N,E).
 %		This will also make it possible for N to be density-dependent in a 
 %		future version.
 % * The myopic criterion for diapause has been replaced by a matrix of entry
@@ -92,7 +92,6 @@ if isfield(v,'dF1')
 	% 
 	% note that (n-generation fitness)^(1/n) is the per-generation fitness, and
 	% (n-generation fitness)^(365/n/(tEcen-t0)) - 1 is the per-year growth rate
-	% (but Hunter et al. 2020 might have some new ideas about this)
 	v.F1 = squeeze(v.F1);
 	v.F2 = squeeze(v.F2);
 end
