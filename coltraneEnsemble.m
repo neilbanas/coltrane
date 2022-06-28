@@ -8,7 +8,7 @@ summaryFile = [dirname 'summary.mat'];
 interimFile = [dirname 'summary-interim.mat'];
 allFile = [dirname 'allCohortsAndStrategies.mat'];
 % initialise structures to hold summaries
-V = initialiseSummary(expts);
+V1 = initialiseSummary(expts);
 V2 = initialiseSummary(expts);
 V1yr = initialiseSummary(expts);
 V2yr = initialiseSummary(expts);
@@ -47,7 +47,7 @@ for i=1:Nexpts
 	
 	% A.* = all cohorts/strategies
 %	fields = fieldnames(vi); % could make this a reduced list of essentials only
-	fields = {'F1','F2','Wa','capfrac','tEcen','t0','D_winter'};
+	fields = {'F1','F2','Wa','capfrac','tEcen','D_winter','t0','level'};
 	for k=1:length(fields)
 		vifk = squeeze(vi.(fields{k}));
 		vifk = reshape(vifk,[1 size(vifk)]);
@@ -57,22 +57,25 @@ for i=1:Nexpts
 		A.(fields{k})(i,:,:) = vifk;
 	end
 
-	% V.* = optimal strategy/cohort, where optimal = max F1
-	f = find(vi.F1==max(vi.F1(:)));
-	V = summarise(V,i,vi,f,forcing);
+	% V1.* = optimal strategy/cohort, where optimal = max F1
+	firstYear = vi.t0 < forcing.t(1) + 365;
+	Fmax = max(vi.F1(firstYear));
+	f = find(vi.F1==Fmax & firstYear);
+	V1 = summarise(V1,i,vi,f,forcing);
 	% where optimal = max F2
-	f = find(vi.F2==max(vi.F2(:)));
+	Fmax = max(vi.F2(firstYear));
+	f = find(vi.F2==Fmax & firstYear);
 	V2 = summarise(V2,i,vi,f,forcing);
 	% optimal (F1) for 1-yr, 2-yr generation lengths
 	gl = (vi.tEcen - vi.t0)./365;
-	Fmax = max(vi.F1(round(gl)<=1));
+	Fmax = max(vi.F1(firstYear & round(gl)<=1));
 	if ~isempty(Fmax)
-		f = find(vi.F1==Fmax & round(gl)<=1);
+		f = find(vi.F1==Fmax & firstYear & round(gl)<=1);
 		V1yr = summarise(V1yr,i,vi,f,forcing);
 	end
-	Fmax = max(vi.F1(round(gl)>=2));
+	Fmax = max(vi.F1(firstYear & round(gl)>=2));
 	if ~isempty(Fmax)
-		f = find(vi.F1==Fmax & round(gl)>=2);
+		f = find(vi.F1==Fmax & firstYear & round(gl)>=2);
 		V2yr = summarise(V2yr,i,vi,f,forcing);
 	end
 			
@@ -83,7 +86,7 @@ end
 
 
 % clean up V and save -----------------
-V = cleanUpSummary(V,expts);
+V1 = cleanUpSummary(V1,expts);
 V2 = cleanUpSummary(V2,expts);
 V1yr = cleanUpSummary(V1yr,expts);
 V2yr = cleanUpSummary(V2yr,expts);
@@ -112,8 +115,11 @@ exptFields = fieldnames(expts);
 V.F1 = zeros(size(expts.(exptFields{1})));
 V.F2 = V.F1;
 V.t0 = nan .* V.F1;
-V.tEcen = nan .* V.F1;
-	
+suffixes = {'0','Ecen','Gain','Yield','YieldR','YieldC56'};
+for k=1:length(suffixes)
+	V.(['t' suffixes{k}]) = nan .* V.F1;
+end
+
 % ------
 function V = summarise(V0,i,vi,f,forcing)
 V = V0;
@@ -124,10 +130,11 @@ if ~isempty(f) & V.level(i) >= 2
 		V.(fields{k})(i) = vi.(fields{k})(f(1));
 	end
 end
-V.x0(i) = interp1(forcing.t,forcing.x,V.t0(i));
-V.y0(i) = interp1(forcing.t,forcing.y,V.t0(i));
-V.xEcen(i) = interp1(forcing.t,forcing.x,V.tEcen(i));
-V.yEcen(i) = interp1(forcing.t,forcing.y,V.tEcen(i));
+suffixes = {'0','Ecen','Gain','Yield','YieldR','YieldC56'};
+for k=1:length(suffixes)
+	V.(['x' suffixes{k}])(i) = interp1(forcing.t,forcing.x,V.(['t' suffixes{k}])(i));
+	V.(['y' suffixes{k}])(i) = interp1(forcing.t,forcing.y,V.(['t' suffixes{k}])(i));
+end
 
 % ------
 function V = cleanUpSummary(V0,expts)

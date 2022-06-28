@@ -153,7 +153,8 @@ v.E = zeros(NT,NC,NS);
 astar = p.rb + (1-p.rb) .* v.a;
 
 for n=1:NT-1
-	f = isfeeding(n,:); e = isineggprod(n,:);
+	f = isfeeding(n,:);
+	e = isineggprod(n,:);
 	% net gain
 	Imax_nf = qg(n,f) .* p.I0 .* v.W(n,f).^(p.theta-1);
 	I_nf = v.a(n,f) .* p.r_assim .* v.sat(n,f) .* Imax_nf;
@@ -239,11 +240,26 @@ v.Na = exp(max(lnNa));
 v.dF1 = real(v.E .* exp(v.lnN) .* dt) ./ v.We_theo;
 v.dF1(isnan(v.dF1)) = 0;
 v.F1 = sum(v.dF1);
+
+% timing metrics ---------------------------------------------------------------
 v.tEcen = sum(v.t .* v.dF1) ./ v.F1; % center of mass of E*N
 	% tEcen - t0 is generation length: similar to, but more accurate than,
 	% dtegg - t0
-		    
-		    
+GWNdt = v.G .* v.W .* exp(v.lnN) .* dt;
+GWNdt(isnan(GWNdt)) = 0;
+GWNdt = max(0, GWNdt);
+v.tGain = sum(v.t .* GWNdt) ./ sum(GWNdt); % center of mass of gain G*W*N
+mWNdt = v.m .* v.W .* exp(v.lnN) .* dt;
+mWNdt(isnan(mWNdt)) = 0;
+v.tYield = sum(v.t .* mWNdt) ./ sum(mWNdt); % center of mass of yield m*W*N
+mRNdt = v.m .* v.R .* exp(v.lnN) .* dt;
+mRNdt(isnan(mRNdt)) = 0;
+v.tYieldR = sum(v.t .* mRNdt) ./ sum(mRNdt); % center of mass of lipid yield m*R*N
+mWNdt = v.m .* v.W .* exp(v.lnN) .* dt .* (v.D >= D_C5_start);
+mWNdt(isnan(mWNdt)) = 0;
+v.tYieldC56 = sum(v.t .* mWNdt) ./ sum(mWNdt); % center of mass of C5-6 yield
+
+	    
 % scalar metrics from forcing --------------------------------------------------
 fields = {'Ptot','T0','Td','sat','ice','satIA','satWC'};
 a0 = v.a;
