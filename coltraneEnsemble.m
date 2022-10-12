@@ -39,7 +39,7 @@ for i=1:Nexpts
 	forcing.sat(:,i) = preySat.sat;
 	
 	disp([num2str(i) ' / ' num2str(Nexpts)]);
-	vi = coltraneModel(forcing,p,'scalars and fitness');
+	vi = coltranePopulation(forcing,p,'scalars and fitness');
 	vi = rmfield(vi,{'dF1','t'});
 		% we save the full fitness landscape in coltrane_integrate.m so that 
 		% coltraneModel.m can calculate the 2-generation fitness--

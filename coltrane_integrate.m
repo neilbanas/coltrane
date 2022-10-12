@@ -1,48 +1,40 @@
-function v = coltrane_integrate(forcing,p,t0,s,whatToSave);
+function v = coltrane_integrate(forcing,p,t0,whatToSave);
 
 % v = coltrane_integrate(forcing,p,t0,s,'everything');
 %   							    ...,'scalars only');
 %   								...,'scalars and fitness');
 %
 % calculates a(t), D(t), W(t), R(t), N(t), E(t), and dF1 for a set of spawning
-% dates t0 and a set of strategies s.
+% dates t0 and a fixed timing strategy (s).
 % 
-% The fields of s should be tdia_exit, tdia_enter, and dtegg. They can be any
-% shape; they will be rearranged into a flat list.
+% The three fields of s (tdia_exit, tdia_enter, and dtegg) should be inside p as
+% additional scalar parameters.
 %
-% note that in practice, we are running this with a single strategy case, breaking
-% up the strategy vector across the parfor loop in coltraneModel, which seems to be
-% the optimal place to parallelise.
-%
-% --------- to do:
-% test whether running one s case at a time gives ok performance when not paralleising;
-% if so, the whole s dimension could be removed from coltrane_integrate. Could rename
-% _integrate, Model, Ensemble to something clearer, or fold a u0 range right into 
-% coltraneModel so that it = a community.
-
+% *** in progress, oct 2022; removing the NS dimension
+% *** to do: move the forcing calcs and the output cleanup into coltraneModel.
+% harmless to always return everything from here and either keep it or throw it
+% away at the next level
 
 if nargin < 5, whatToSave = 'everything'; end
 
-v = forcing; % copy over forcing time series
-NT = size(v.t,1); % # timesteps
-v.yday = yearday(v.t); % make sure this is filled in and consistent
-% determine the simulation timestep from the forcing time series
-dt = v.t(2) - v.t(1);
-
-% get t, t0, and s to the proper shapes
-NC = length(t0);
-fields = fieldnames(s);
-NS = length(s.(fields{1})(:));
-v.t = repmat(v.t(:), [1 NC NS]);
-v.t0 = repmat(reshape(t0,[1 NC 1]), [1 1 NS]);
+% copy over forcing time series and put them in the right shape
+v = forcing;
+v.t0 = t0(:)';
+NC = size(v.t0,2); % number of cohorts (t0 values)
+NT = size(v.t,1); % number of timesteps
+fields = fieldnames(forcing);
 for k=1:length(fields)
-	v.(fields{k}) = repmat(reshape(s.(fields{k}),[1 1 NS]),[1 NC 1]);
+	v.(fields{k}) = repmat(forcing.(fields{k})(:),[1 NC]);
 end
-tegg = v.t0 + v.dtegg; % date that egg production starts, [1 NC NS]
-tegg_3d = repmat(tegg,[NT 1 1]);
 
-v.F1 = zeros(1,NC,NS);
-v.level = zeros(1,NC,NS);
+% timebase
+v.yday = yearday(v.t); % make sure this is filled in and consistent
+dt = v.t(2) - v.t(1);  % determine simulation timestep from the forcing time series
+
+% define output variables that exist for all cases, even if there are no valid
+% solutions to the model integration
+v.F1 = zeros(1,NC);
+v.level = zeros(1,NC);
 	% level 0 = logical inconsistency (between development and dtegg)
  	% level 1 = successful diapause
  	% level 2 = reaches adulthood
@@ -50,35 +42,33 @@ v.level = zeros(1,NC,NS);
  	
 
 % activity: a(t) ------------------------------------------------------
-v.a = double(~(v.yday >= repmat(v.tdia_enter,[NT 1 1]) | ...
-			   v.yday <= repmat(v.tdia_exit,[NT 1 1])));
+v.a = double(~(v.yday >= p.tdia_enter | v.yday <= p.tdia_exit));
 	% assumes that tdia_enter > tdia_exit
-isalive = v.t >= repmat(v.t0,[NT 1 1]); % born yet?
+isalive = v.t >= repmat(v.t0,[NT 1]); % born yet?
 if p.requireActiveSpawning
-	% eliminate (t0,s) combinations in which t0 falls during diapause
+	% eliminate t0 values fall during diapause
 	t0_yday = yearday(v.t0);
-	activeSpawning = ~(t0_yday >= v.tdia_enter | t0_yday <= v.tdia_exit);
-	isalive = isalive & repmat(activeSpawning,[NT 1 1]); 
-	% likewise (t0,s) combinations in which t0+dtegg falls during diapause
+	activeSpawning = ~(t0_yday >= p.tdia_enter | t0_yday <= p.tdia_exit);
+	isalive = isalive & repmat(activeSpawning,[NT 1]); 
+	% likewise t0 values in which t0+dtegg falls during diapause
 	% (this eliminates some redundancy)
-	ta_yday = yearday(v.t0+v.dtegg);
-	activeNextSpawning = ~(ta_yday >= v.tdia_enter | ta_yday <= v.tdia_exit);
-	isalive = isalive & repmat(activeNextSpawning,[NT 1 1]); 
+	ta_yday = yearday(v.t0 + p.dtegg);
+	activeNextSpawning = ~(ta_yday >= p.tdia_enter | ta_yday <= p.tdia_exit);
+	isalive = isalive & repmat(activeNextSpawning,[NT 1]); 
 end
-
 
 % temperature response factors: qd, qg  --------------------------------
 v.temp = v.a .* v.T0 + (1-v.a) .* v.Td;
-qd = zeros(NT,NC,NS);
+qd = zeros(NT,NC);
 qd(isalive) = (p.Q10d^0.1) .^ v.temp(isalive);
-qg = zeros(NT,NC,NS);
+qg = zeros(NT,NC);
 qg(isalive) = (p.Q10g^0.1) .^ v.temp(isalive);
 
 
 % prey saturation ------------------------------------------------------
 v = preySaturation(v,p);
 if size(v.sat,2)==1
-	v.sat = repmat(v.sat(:),[1 NC NS]);
+	v.sat = repmat(v.sat(:),[1 NC]);
 end
 
 
@@ -97,23 +87,27 @@ isfeeding = v.D >= p.Df; % recalculated because cumsum() is one timestep
 % This is equivalent to juvenile and adult if the animals delay their
 % final maturation until just before egg prod. begins, but not if they enter
 % C6 and then delay egg prod. (e.g. in the case of overwintering C6's)
-isineggprod = v.t >= tegg_3d;
+isineggprod = (v.t >= v.t0 + p.dtegg);
 
 % check D(t) for consistency with dtegg
 toolate = any(v.D<1 & isineggprod);
 v.D(:,toolate) = nan;
 if all(toolate)
-	return
 	% if there are no good solutions at all, don't bother with the rest of the model
+	fields = cat(1,fieldnames(forcing),'yday'); % a bit of output cleanup
+	for k=1:length(fields)
+		v.(fields{k}) = v.(fields{k})(:,1);
+	end
+	return
 end
 
 % calculate D in middle of first winter, just as a diagnostic
 [yr0,~] = datevec(v.t0);
-first31dec = repmat(reshape(datenum(yr0,12,31), [1 NC NS]), [NT 1 1]);
+first31dec = repmat(reshape(datenum(yr0,12,31), [1 NC]), [NT 1]);
 is31dec = abs(v.t-first31dec) == ...
-			  repmat(min(abs(v.t-first31dec)),[NT 1 1]);
+			  repmat(min(abs(v.t-first31dec)),[NT 1]);
 is31dec = is31dec & cumsum(is31dec)==1;
-v.D_winter = reshape(v.D(is31dec),[1 NC NS]);
+v.D_winter = reshape(v.D(is31dec),[1 NC]);
 
 % flag time points at which the animal is in diapause but at a 
 % diapause-incapable stage, and mark these cases as dead
@@ -145,11 +139,11 @@ v.We_theo = p.r_ea .* v.Wa_theo .^ p.exp_ea;
 
 
 % energy gain, growth, egg production: G(t), W(t), R(t), E(t) ------------------
-v.G = zeros(NT,NC,NS);
-v.W = repmat(v.We_theo,[NT 1 1]);
-v.R = zeros(NT,NC,NS);
-v.Einc = zeros(NT,NC,NS);
-v.E = zeros(NT,NC,NS);
+v.G = zeros(NT,NC);
+v.W = repmat(v.We_theo,[NT 1]);
+v.R = zeros(NT,NC);
+v.Einc = zeros(NT,NC);
+v.E = zeros(NT,NC);
 astar = p.rb + (1-p.rb) .* v.a;
 
 for n=1:NT-1
@@ -189,9 +183,9 @@ for n=1:NT-1
 end
 
 % adult size Wa, Ra (= size at the moment egg prod begins)
-last = ~isineggprod(1:end-1,:,:) & isineggprod(2:end,:,:);
-v.Wa = max(v.W(1:end-1,:,:) .* last);
-v.Ra = max(v.R(1:end-1,:,:) .* last);
+last = ~isineggprod(1:end-1,:) & isineggprod(2:end,:);
+v.Wa = max(v.W(1:end-1,:) .* last);
+v.Ra = max(v.R(1:end-1,:) .* last);
 % update the estimate of We
 v.We = p.r_ea .* v.Wa .^ p.exp_ea;
 % capital fraction of egg production
@@ -211,7 +205,6 @@ end
 % need to save full time-series output)
 D_C5_start = 0.5.*(stage2D('C4') + stage2D('C5'));
 iswin = v.yday >= datenum('Nov 1 0000') | v.yday <= datenum('Feb 28 0000');
-iswin = repmat(iswin(:),[1 NC NS]);
 iswinlatestage = double(v.D >= D_C5_start & isalive & iswin);
 iswinlatestage(iswinlatestage==0)=nan;
 v.W_C56win = nanmean(v.W.*iswinlatestage);
@@ -226,7 +219,7 @@ v.E(~isalive) = 0;
 
 
 % mortality and survivorship: N(t) ---------------------------------------------
-v.m = zeros(NT,NC,NS);
+v.m = zeros(NT,NC);
 v.m(isalive) = p.m0 .* qg(isalive) .* v.a(isalive) .* v.W(isalive).^(p.theta-1);
 	% mort. rate at T, size
 v.lnN = cumsum(-v.m) .* dt;
@@ -269,7 +262,6 @@ for k = 1:length(fields)
 		f0 = v.(fields{k});
 		f0(~isfinite(f0)) = 0;
 		if size(f0,2)==1, f0 = repmat(f0,[1 NC 1]); end
-		if size(f0,3)==1, f0 = repmat(f0,[1 1 NS]); end
 		v.([fields{k} '_avg']) = nanmean(f0);
 		v.([fields{k} '_active']) = sum(f0.*a0) ./ sum(a0);
 		isgrowing = isalive & ~isineggprod;
@@ -287,11 +279,19 @@ elseif strcmpi(whatToSave,'scalars and fitness')
 	v = keepScalars(v);
 	v.dF1 = dF1;
 	v.t = t;
-else
+else % save everything including full time series
+	% blank out nonliving portions of the time series
 	v.a(~isalive) = nan;
 	v.D(~isalive) = nan;
 	v.W(~isalive) = nan;
 	v.R(~isalive) = nan;
 	v.lnN(~isalive) = -Inf;
 	v.E(~isalive) = 0;
+	% undo the replication of forcing variables across the t0 dimension
+	% to save storage
+	fields = cat(1,fieldnames(forcing),'yday');
+	for k=1:length(fields)
+		v.(fields{k}) = v.(fields{k})(:,1);
+	end
 end
+
