@@ -1,21 +1,13 @@
-function v = coltrane_integrate(forcing,p,t0,whatToSave);
+function v = coltrane_integrate(forcing,p,t0);
 
-% v = coltrane_integrate(forcing,p,t0,s,'everything');
-%   							    ...,'scalars only');
-%   								...,'scalars and fitness');
+% v = coltrane_integrate(forcing,p,t0);
 %
 % calculates a(t), D(t), W(t), R(t), N(t), E(t), and dF1 for a set of spawning
-% dates t0 and a fixed timing strategy (s).
+% dates t0 and a fixed timing strategy (s), along with a variety of summary metrics.
 % 
 % The three fields of s (tdia_exit, tdia_enter, and dtegg) should be inside p as
 % additional scalar parameters.
-%
-% *** in progress, oct 2022; removing the NS dimension
-% *** to do: move the forcing calcs and the output cleanup into coltraneModel.
-% harmless to always return everything from here and either keep it or throw it
-% away at the next level
 
-if nargin < 5, whatToSave = 'everything'; end
 
 % copy over forcing time series and put them in the right shape
 v = forcing;
@@ -94,10 +86,6 @@ toolate = any(v.D<1 & isineggprod);
 v.D(:,toolate) = nan;
 if all(toolate)
 	% if there are no good solutions at all, don't bother with the rest of the model
-	fields = cat(1,fieldnames(forcing),'yday'); % a bit of output cleanup
-	for k=1:length(fields)
-		v.(fields{k}) = v.(fields{k})(:,1);
-	end
 	return
 end
 
@@ -160,9 +148,9 @@ for n=1:NT-1
 	dW(dW>0 & e) = 0; % definitely
 	if ~p.allowGainAfterD1
 		dW(dW>0 & v.D(n,:)==1) = 0;
-		% this is meant to accomplish what Aidan's maxReserves mechanism did.
-		% note that positive gain is simply lost between D=1 and the start of egg prod,
-		% as if the animals are wishing they were in diapause. It might be too strict.
+		% positive gain is simply lost between D=1 and the start of egg prod, as if the
+		% animals are wishing they were in diapause. This might be too strict, but 
+		% otherwise there's no upper limit on the buildup of reserves.
 	end
 	v.W(n+1,:) = max(0, v.W(n,:) + dW);
 	% allocation to reserves
@@ -201,7 +189,7 @@ for i=2:length(stages)-1
 	v.(['R_' stages{i}]) = nanmean(v.R .* atstage_i);
 end
 % W, R for winter late stages
-% (that this is not a general definition of winter, but calculating it here avoids the
+% (this is not a general definition of winter, but calculating it here avoids the
 % need to save full time-series output)
 D_C5_start = 0.5.*(stage2D('C4') + stage2D('C5'));
 iswin = v.yday >= datenum('Nov 1 0000') | v.yday <= datenum('Feb 28 0000');
@@ -271,27 +259,10 @@ end
 	
 	
 % clean up ---------------------------------------------------------------------
-if strcmpi(whatToSave,'scalars only')
-	v = keepScalars(v);
-elseif strcmpi(whatToSave,'scalars and fitness')
-	dF1 = v.dF1;
-	t = v.t;
-	v = keepScalars(v);
-	v.dF1 = dF1;
-	v.t = t;
-else % save everything including full time series
-	% blank out nonliving portions of the time series
-	v.a(~isalive) = nan;
-	v.D(~isalive) = nan;
-	v.W(~isalive) = nan;
-	v.R(~isalive) = nan;
-	v.lnN(~isalive) = -Inf;
-	v.E(~isalive) = 0;
-	% undo the replication of forcing variables across the t0 dimension
-	% to save storage
-	fields = cat(1,fieldnames(forcing),'yday');
-	for k=1:length(fields)
-		v.(fields{k}) = v.(fields{k})(:,1);
-	end
-end
-
+% blank out nonliving portions of the time series
+v.a(~isalive) = nan;
+v.D(~isalive) = nan;
+v.W(~isalive) = nan;
+v.R(~isalive) = nan;
+v.lnN(~isalive) = -Inf;
+v.E(~isalive) = 0;
