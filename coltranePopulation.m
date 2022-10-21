@@ -36,15 +36,17 @@ function [pop,popts] = coltranePopulation(forcing,p);
 %	(calendar)	(calendar)	(yearday)	(yearday)	(relative to t0)
 %
 % the last three of these are folded into a single strategy vector s.
-%
-% *** in process Oct 2022: moving to a cleaner hierarchy,
-% integrate -> Population -> Community 
-% *** to do: save time series in their own variable
+
+% to do ------
+% option to run only particular indices into s? useful if saving full time series for
+% a small set of optimal cases
 
 
 retainTimeSeries = (nargout >= 2);
 % if popts is requested as an output, we save full time series (which get really big),
 % otherwise discard them and save only summaries
+ts_alwaysKeep = {'t','dF1'}; % time series to always save as we go along
+ts_alwaysOmit = cat(1,fieldnames(forcing),'yday'); % time series to always omit
 
 NT = size(forcing.t(:),1); % # timesteps
 [t0,s] = timingCombinations(forcing,p);
@@ -53,13 +55,21 @@ NC = length(t0);
 NS = prod(size(s.(strategyFields{1})));
 
 
+
 % run one strategy at a time -----------------------------------------------------------
 out = cell(1,NS);
 disp([num2str(NT) ' timesteps x ' num2str(NC) ' cohorts x ' num2str(NS) ' strategies']);
+parfor_progress(NS);
 parfor i = 1:NS
 	pii = addStrategyToParams(p,s,i);
-	out{i} = coltrane_integrate(forcing,pii,t0);
+	out{i} = coltrane_integrate(forcing,pii,t0); % <-- <-- <--
+	if ~retainTimeSeries
+		out{i} = dropTimeSeries(out{i},ts_alwaysKeep);
+	end
+	parfor_progress;
 end
+parfor_progress(0);
+
 
 
 % clean up output ----------------------------------------------------------------------
@@ -78,7 +88,6 @@ end
 
 % rearrange the output from all the individual runs into a single structure
 % (plus a second one for time series variables if we're keeping them)
-forcingFields = cat(1,fieldnames(forcing),'yday'); % time series to always omit
 fields = fieldnames(out{f(1)});
 for k = 1:length(fields)
 	example = out{f(1)}.(fields{k}); % our example of this var
@@ -89,8 +98,8 @@ for k = 1:length(fields)
 				pop.(fields{k})(:,:,i) = out{i}.(fields{k});
 			end
 		end
-	elseif strcmpi(fields{k},'dF1') || strcmpi(fields{k},'t') || ...
-		(retainTimeSeries && ~ismember(fields{k},forcingFields))
+	elseif ismember(fields{k},ts_alwaysKeep) || ...
+		(retainTimeSeries && ~ismember(fields{k},ts_alwaysOmit))
 		% if it's a time series, and we're retaining time series, and it isn't in the
 		% always-omit list -- or if it's dF1 or t, which we always save since they're 
 		% necessary to compute the two-generation fitness:
@@ -105,6 +114,10 @@ end
 
 
 % two-generation fitness ----------------------------------------------------------------
+% this calculation is why we need to run cohorts for multiple years (longest lifecycle 
+% plus one) just to evaluate the fitness of the cohorts born in the first year. If you
+% are running a steady-state annual cycle, it would be a big speedup to reimplement a
+% version of the cyclical calculation from v1.0 (as in the 2016 paper).
 if isfield(popts,'dF1')
 	F1expected = max(pop.F1,[],3); % expected LEP for each t0, assuming that the 
 								 % offspring will take the optimal strategy
@@ -148,4 +161,18 @@ pii = p;
 fields = fieldnames(s);
 for k=1:length(fields)
 	pii.(fields{k}) = s.(fields{k})(ind);
+end
+
+% remove time series variables to save (a massive amount of) memory
+function out1 = dropTimeSeries(out,ts_alwaysKeep)
+fields = fieldnames(out);
+for k=1:length(fields)
+	if size(out.(fields{k}),1)==1
+		out1.(fields{k}) = out.(fields{k});
+	end
+	for k=1:length(ts_alwaysKeep)
+		if isfield(out,ts_alwaysKeep{k})
+			out1.(ts_alwaysKeep{k}) = out.(ts_alwaysKeep{k});
+		end
+	end
 end
