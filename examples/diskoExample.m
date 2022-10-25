@@ -44,7 +44,7 @@ forcing.P = max(forcing.P, ...
 fsum = forcing.t > tPspr & forcing.t < tPaut;
 forcing.P(fsum) = max(forcing.P(fsum),P0sum);
 
-% repeat this cycle for 7 years to resolve 3 year life cycles ----------------
+% repeat this cycle for 7 years to resolve 3 year life cycles --------
 Nyears = 7;
 ind = [repmat((1:365)',[Nyears 1]); 1];
 forcing.t = (0:(Nyears*365))';
@@ -56,8 +56,7 @@ forcing.P = forcing.P(ind);
 % main coltrane experiment ----------------------------------------------------------
 
 dt = 20; % 15 is better, 30 is quicker
-p00 = coltraneParams('Nyears',3,...
-				   'requireActiveSpawning',0,...
+p00 = coltraneParams('requireActiveSpawning',0,...
 				   'tdia_exit',[80 : dt : 120],...
 				   'tdia_enter',[260 : dt : 300],...
 				   'min_genlength_years',1,...
@@ -66,9 +65,42 @@ p00 = coltraneParams('Nyears',3,...
 				   'preySatVersion','default',...
 				   'I0',0.36,...
 				   'Ks',1,...
-				   'Ddia',0.5*(stage2D('C2')+stage2D('C3')),... % start of C3
-				   'allowGainAfterD1',0);
+				   'maxReserveFrac',0.8);
 traits.u0 = 0.005 : 0.002 : 0.009;
 coltraneCommunity('diskoEx',forcing,p00,traits);
+
+
+
+
+% postprocessing ---------------------------------------------------------------------
+load diskoEx
+comm.gl = (comm.tEcen-comm.t0)./365;
+comm.Fyr = comm.F2.^(1./2./comm.gl);
+f = find(comm.Fyr>0 & comm.t0 <= 365);
+figure
+subplot 221
+scatter(comm.Wa(f),comm.gl(f),30,comm.Fyr(f),'o','filled')
+set(gca,'xscale','log')
+colorbar
+xlabel('Wa')
+ylabel('gl')
+subplot 222
+scatter(comm.Wa(f),comm.Ra(f)./comm.Wa(f),30,comm.Fyr(f),'o','filled')
+set(gca,'xscale','log')
+colorbar
+xlabel('Wa')
+ylabel('Ra/Wa')
+subplot 223
+scatter(comm.Wa(f),comm.D_winter(f),30,comm.Fyr(f),'o','filled')
+set(gca,'xscale','log')
+colorbar
+xlabel('Wa')
+ylabel('Dwinter')
+subplot 224
+scatter(comm.Wa(f),comm.capfrac(f),30,comm.Fyr(f),'o','filled')
+set(gca,'xscale','log')
+colorbar
+xlabel('Wa')
+ylabel('capfrac')
 
 

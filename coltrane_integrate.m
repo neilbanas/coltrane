@@ -145,19 +145,17 @@ for n=1:NT-1
     GWdt = v.G(n,:) .* v.W(n,:) .* dt;
 	% allocation to growth
 	dW = GWdt;
-	dW(dW>0 & e) = 0; % definitely
-	if ~p.allowGainAfterD1
-		dW(dW>0 & v.D(n,:)==1) = 0;
-		% positive gain is simply lost between D=1 and the start of egg prod, as if the
-		% animals are wishing they were in diapause. This might be too strict, but 
-		% otherwise there's no upper limit on the buildup of reserves.
-	end
+	dW(dW>0 & e) = 0; % no storage or growth once egg production has begun
 	v.W(n+1,:) = max(0, v.W(n,:) + dW);
 	% allocation to reserves
 	fr = (v.D(n,:) - p.Ds) ./ (1 - p.Ds);
 	fr = max(0,min(1,fr));
 	fr(GWdt < 0) = 1; % all net losses come from R
     v.R(n+1,:) = v.R(n,:) + fr .* dW;
+    % if R/W > maxReserveFrac, we added too much: throw some of dW away
+    excess = max(0, v.R(n+1,:) - p.maxReserveFrac .* v.W(n+1,:));
+    v.W(n+1,:) = v.W(n+1,:) - excess;
+    v.R(n+1,:) = v.R(n+1,:) - excess;
     % income egg production
     v.Einc(n,:) = max(0,GWdt)./dt .* e;
 	% capital egg production
