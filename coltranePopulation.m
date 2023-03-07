@@ -76,13 +76,13 @@ parfor_progress(0);
 
 % figure out which strategies produced successful cases
 for i = 1:NS
-	v.level(:,i) = out{i}.level(:);
+	pop.level(:,i) = out{i}.level(:);
 end
-f = find(any(v.level>0)); % strategies with any complete integrations
+f = find(any(pop.level>0)); % strategies with any complete integrations
 if isempty(f)
 	% if there aren't any, return only level (and F1, F2 = 0)
-	v.F1 = zeros(size(level));
-	v.F2 = zeros(size(level));
+	pop.F1 = zeros(size(pop.level));
+	pop.F2 = zeros(size(pop.level));
 	return;
 end
 
