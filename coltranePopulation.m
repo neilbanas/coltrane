@@ -46,7 +46,9 @@ retainTimeSeries = (nargout >= 2);
 % if popts is requested as an output, we save full time series (which get really big),
 % otherwise discard them and save only summaries
 ts_alwaysKeep = {'t','dF1'}; % time series to always save as we go along
-ts_alwaysOmit = cat(1,fieldnames(forcing),'yday'); % time series to always omit
+ts_alwaysOmit = cat(1,fieldnames(forcing),'yday'); % time series to always omit.
+	% If you are running out of memory in experiments that save popts, add more
+	% variables to this list
 
 NT = size(forcing.t(:),1); % # timesteps
 [t0,s] = timingCombinations(forcing,p);
@@ -127,7 +129,23 @@ if isfield(popts,'dF1')
 	F1ex_ = repmat(F1ex_(:),[1 NC NS]);
 	dF2 = popts.dF1 .* F1ex_; % contribution to two-generation fitness at each (t,t0,s)
 	pop.F2 = sum(dF2); % two-generation fitness at each (t0,s)
-	% could iterate like this: F2expected = max(v.F2,[],3); ...
+	
+	% we can iterate like this: F2expected = max(v.F2,[],3); ...
+	nFitnessGens = 4;
+	Fnminusone = pop.F2;
+	dFnminusone = dF2;
+	for n = 3:nFitnessGens
+		Fnminusone_expected = max(Fnminusone,[],3);
+		Fnm1ex_ = interp1(pop.t0(:,:,1),Fnminusone_expected,popts.t(:,1));
+		Fnm1ex_(isnan(Fnm1ex_)) = 0;
+		Fnm1ex_ = repmat(Fnm1ex_(:),[1 NC NS]);
+		dFn = dFnminusone .* Fnm1ex_;
+		Fn = sum(dFn);
+		pop.(['F' num2str(n)]) = Fn;
+		Fnminusone = Fn;
+		dFnminusone = dFn;
+	end
+	
 end
 % note that (n-generation fitness)^(1/n) is the per-generation fitness, and
 % (n-generation fitness)^(365/n/(tEcen-t0)) - 1 is the per-year growth rate

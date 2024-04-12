@@ -1,6 +1,9 @@
-function coltraneCommunity(outfile,forcing,p0,traits,doFiltering);
+function [comm,forcing,p0,traits] = ...
+	coltraneCommunity(outfile,forcing,p0,traits,doFiltering);
 
 % coltraneCommunity(outfile,forcing,p0,traits,doFiltering);
+% [comm,forcing,p0,traits] = ...
+%		coltraneCommunity([],forcing,p0,traits,doFiltering);
 %
 % runs Coltrane for a single forcing time series but some range of
 % one or more traits, constructing a population for each element of the
@@ -8,8 +11,11 @@ function coltraneCommunity(outfile,forcing,p0,traits,doFiltering);
 % and timing strategy s = (tdia_enter, tdia_exit, dtegg).
 %
 % if doFiltering = 'no filtering' or 0, returns every combination of traits x t0 x s
-% otherwise, ***not written yet, wasn't there something about sequences in dtegg
-% *** also, only return t0 in the first year, right?
+% otherwise, applies filterCommunity.m.
+%
+% if _outfile_ is empty, returns results as variables only.
+
+if nargin < 5, doFiltering = 0; end
 
 traitFields = fieldnames(traits);
 Ntr = numel(traits.(traitFields{1}));
@@ -55,7 +61,15 @@ fields = fieldnames(traits);
 sz = size(comm.F1);
 	for k=1:length(fields)
 	comm.(fields{k}) = repmat(traits.(fields{k})(:),[1 sz(2:end)]);
-
 end
 
-save('-v7.3',outfile, 'comm','forcing','p0','traits');
+% optionally, filter down to the small useful subset of combinations.
+% for flexibility, this is saved as a separate utility function, so one could
+% save the full output, inspect low-fitness cases, and then filter after the fact
+if doFiltering
+	comm = filterCommunity(comm);		 
+end
+
+if ~isempty(outfile)
+	save('-v7.3',outfile, 'comm','forcing','p0','traits');
+end

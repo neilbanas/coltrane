@@ -38,7 +38,7 @@ v.a = double(~(v.yday >= p.tdia_enter | v.yday <= p.tdia_exit));
 	% assumes that tdia_enter > tdia_exit
 isalive = v.t >= repmat(v.t0,[NT 1]); % born yet?
 if p.requireActiveSpawning
-	% eliminate t0 values fall during diapause
+	% eliminate t0 values that fall during diapause
 	t0_yday = yearday(v.t0);
 	activeSpawning = ~(t0_yday >= p.tdia_enter | t0_yday <= p.tdia_exit);
 	isalive = isalive & repmat(activeSpawning,[NT 1]); 
