@@ -174,8 +174,6 @@ v.Wa = max(v.W(1:end-1,:) .* last);
 v.Ra = max(v.R(1:end-1,:) .* last);
 % update the estimate of We
 v.We = p.r_ea .* v.Wa .^ p.exp_ea;
-% capital fraction of egg production
-v.capfrac = sum(v.E - v.Einc) ./ sum(v.E);
 % W, R at all stages
 stages = {'N6','C1','C2','C3','C4','C5','C6'};
 for i=2:length(stages)-1
@@ -193,8 +191,8 @@ D_C5_start = 0.5.*(stage2D('C4') + stage2D('C5'));
 iswin = v.yday >= datenum('Nov 1 0000') | v.yday <= datenum('Feb 28 0000');
 iswinlatestage = double(v.D >= D_C5_start & isalive & iswin);
 iswinlatestage(iswinlatestage==0)=nan;
-v.W_C56win = nanmean(v.W.*iswinlatestage);
-v.R_C56win = nanmean(v.R.*iswinlatestage);
+v.W_C56win = nanmean(v.W.*iswinlatestage); % this looks ok (Arctic inflow, april 2024)
+v.R_C56win = nanmean(v.R.*iswinlatestage); % this isn't working: big negative values
 
 
 % check for starvation
@@ -202,6 +200,10 @@ isstarving = v.R < -p.rstarv .* v.W;
 isalive = isalive & cumsum(isstarving)==0;
 isineggprod = isineggprod & isalive;
 v.E(~isalive) = 0;
+v.Einc(~isalive) = 0;
+
+% capital fraction of egg production
+v.capfrac = sum(v.E - v.Einc) ./ sum(v.E);
 
 
 % mortality and survivorship: N(t) ---------------------------------------------
@@ -213,12 +215,18 @@ v.lnN = cumsum(-v.m) .* dt;
 lnNa = v.lnN;
 lnNa(~isineggprod) = nan;
 v.Na = exp(max(lnNa));
-
+% better Wa, Ra, capfrac estimates: abundance-weighted over the whole adult period
+Ndt = isalive .* (v.D==1) .* exp(v.lnN) .* dt;
+v.Wa2 = sum(v.W .* Ndt) ./ sum(Ndt);
+v.Ra2 = sum(v.R .* Ndt) ./ sum(Ndt);
+v.capfrac2 = 1 - sum(v.Einc .* Ndt)./sum(v.E .* Ndt);
+        
 
 % contributions to fitness at each t -------------------------------------------
 v.dF1 = real(v.E .* exp(v.lnN) .* dt) ./ v.We_theo;
 v.dF1(isnan(v.dF1)) = 0;
 v.F1 = sum(v.dF1);
+
 
 % timing metrics ---------------------------------------------------------------
 v.tEcen = sum(v.t .* v.dF1) ./ v.F1; % center of mass of E*N
@@ -237,6 +245,9 @@ v.tYieldR = sum(v.t .* mRNdt) ./ sum(mRNdt); % center of mass of lipid yield m*R
 mWNdt = v.m .* v.W .* exp(v.lnN) .* dt .* (v.D >= D_C5_start);
 mWNdt(isnan(mWNdt)) = 0;
 v.tYieldC56 = sum(v.t .* mWNdt) ./ sum(mWNdt); % center of mass of C5-6 yield
+% let's save yield and lipid yield while we're at it
+v.yield = sum(mWNdt);
+v.yieldR = sum(mRNdt);
 
 	    
 % scalar metrics from forcing --------------------------------------------------

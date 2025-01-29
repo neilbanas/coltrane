@@ -61,16 +61,16 @@ NS = prod(size(s.(strategyFields{1})));
 % run one strategy at a time -----------------------------------------------------------
 out = cell(1,NS);
 disp([num2str(NT) ' timesteps x ' num2str(NC) ' cohorts x ' num2str(NS) ' strategies']);
-parfor_progress(NS);
+%parfor_progress(NS);
 parfor i = 1:NS
 	pii = addStrategyToParams(p,s,i);
 	out{i} = coltrane_integrate(forcing,pii,t0); % <-- <-- <--
 	if ~retainTimeSeries
 		out{i} = dropTimeSeries(out{i},ts_alwaysKeep);
 	end
-	parfor_progress;
+%	parfor_progress;
 end
-parfor_progress(0);
+%parfor_progress(0);
 
 
 
